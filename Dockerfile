@@ -9,13 +9,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Copia el resto
+# Copia el resto del repo
 COPY . .
 
-# Build (si tu worker usa ts-node puede no ser necesario, pero mejor compilar si tienes build)
-# Si esto falla, lo quitamos luego
+# Build (si tienes build; si no, no pasa nada)
 RUN npm run build || echo "build skipped"
 
-# Comando del worker
-CMD ["bash", "-lc", "mkdir -p /app/secrets && if [ -n \"$GCP_SERVICE_ACCOUNT_JSON\" ]; then echo \"$GCP_SERVICE_ACCOUNT_JSON\" > /app/secrets/gen-lang-client-0412493534-def18059d5a5.json; fi && npm run worker"]
+# Entrypoint que crea /app/secrets y escribe el JSON
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
+ENTRYPOINT ["/entrypoint.sh"]
