@@ -2,6 +2,17 @@ import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
 import { NextResponse } from 'next/server'
 
+function resolveAppUrl(req: Request) {
+    const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (fromEnv) {
+        const withoutTrailingSlash = fromEnv.replace(/\/$/, '');
+        if (/^https?:\/\//i.test(withoutTrailingSlash)) return withoutTrailingSlash;
+        return `https://${withoutTrailingSlash}`;
+    }
+
+    return new URL(req.url).origin;
+}
+
 export async function POST(req: Request) {
     try {
         const supabase = createClient()
@@ -35,9 +46,11 @@ export async function POST(req: Request) {
                 .eq('user_id', user.id)
         }
 
+        const appUrl = resolveAppUrl(req);
+
         const session = await stripe.billingPortal.sessions.create({
             customer: stripeCustomerId,
-            return_url: `${process.env.NEXT_PUBLIC_APP_URL}/app/billing`,
+            return_url: `${appUrl}/app/billing`,
         })
 
         return NextResponse.json({ url: session.url })

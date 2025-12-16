@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stripe, STRIPE_PRICES, PLANS } from '@/lib/stripe';
 
+function resolveAppUrl(req: Request) {
+    const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (fromEnv) {
+        const withoutTrailingSlash = fromEnv.replace(/\/$/, '');
+        if (/^https?:\/\//i.test(withoutTrailingSlash)) return withoutTrailingSlash;
+        return `https://${withoutTrailingSlash}`;
+    }
+
+    return new URL(req.url).origin;
+}
+
 export async function POST(req: NextRequest) {
     try {
         const supabase = createClient();
@@ -49,6 +60,8 @@ export async function POST(req: NextRequest) {
                 .eq('user_id', user.id);
         }
 
+        const appUrl = resolveAppUrl(req);
+
         // Create Checkout Session
         const checkoutSession = await stripe.checkout.sessions.create({
             customer: stripeCustomerId,
@@ -60,8 +73,8 @@ export async function POST(req: NextRequest) {
                     quantity: 1,
                 },
             ],
-            success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?success=true`,
-            cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?canceled=true`,
+            success_url: `${appUrl}/dashboard/billing?success=true`,
+            cancel_url: `${appUrl}/dashboard/billing?canceled=true`,
             metadata: {
                 userId: user.id,
                 planId: planId,

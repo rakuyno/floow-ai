@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
 
+function resolveAppUrl(req: Request) {
+    const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (fromEnv) {
+        const withoutTrailingSlash = fromEnv.replace(/\/$/, '');
+        if (/^https?:\/\//i.test(withoutTrailingSlash)) return withoutTrailingSlash;
+        return `https://${withoutTrailingSlash}`;
+    }
+
+    return new URL(req.url).origin;
+}
+
 export async function POST(req: NextRequest) {
     try {
         const supabase = createClient();
@@ -22,9 +33,11 @@ export async function POST(req: NextRequest) {
             return new NextResponse('No Stripe customer found', { status: 404 });
         }
 
+        const appUrl = resolveAppUrl(req);
+
         const session = await stripe.billingPortal.sessions.create({
             customer: subscription.stripe_customer_id,
-            return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+            return_url: `${appUrl}/dashboard/billing`,
         });
 
         return NextResponse.json({ url: session.url });
