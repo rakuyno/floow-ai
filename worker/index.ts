@@ -1,5 +1,3 @@
-import { setupGCP } from "./setup-gcp";
-setupGCP();
 import { createClient } from '@supabase/supabase-js'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegPath from 'ffmpeg-static'
