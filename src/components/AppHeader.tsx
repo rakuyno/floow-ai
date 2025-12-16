@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
 import PricingModal from './PricingModal'
+import Logo from './Logo'
 import { createClient } from '@/lib/supabase/client'
 
 interface AppHeaderProps {
@@ -44,7 +45,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                 <div className="flex h-16 justify-between">
                     <div className="flex">
                         <div className="flex flex-shrink-0 items-center">
-                            <span className="text-xl font-bold text-indigo-600">AnunciosUGC</span>
+                            <Logo className="h-8 w-auto" imgClassName="h-8" />
                         </div>
                         <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                             {navigation.map((item) => (

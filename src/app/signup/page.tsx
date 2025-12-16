@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -65,15 +66,8 @@ export default function SignupPage() {
         <div className="w-full flex items-center justify-center lg:max-w-[51%]">
           <div className="w-full max-w-[518px] p-8">
             {/* Logo - Solo visible en móvil */}
-            <div className="mx-auto lg:hidden mb-8">
-              <div className="flex items-center justify-center space-x-3">
-                <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-xl">A</span>
-                </div>
-                <span className="text-2xl font-black text-black tracking-wide">
-                  AnunciosUGC
-                </span>
-              </div>
+            <div className="mx-auto lg:hidden mb-8 flex justify-center">
+              <Logo className="h-10 w-auto" imgClassName="h-10" />
             </div>
 
             {/* Título */}
@@ -193,9 +187,7 @@ export default function SignupPage() {
           <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-lg h-full w-full relative overflow-hidden flex flex-col justify-between p-8">
             {/* Logo */}
             <div className="flex justify-start">
-              <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center shadow-lg">
-                <span className="text-2xl font-bold text-gray-900">A</span>
-              </div>
+              <Logo className="h-14 w-auto drop-shadow-lg" imgClassName="h-14" />
             </div>
 
             {/* Contenido central */}
