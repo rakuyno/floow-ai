@@ -15,19 +15,23 @@ interface AppHeaderProps {
 export default function AppHeader({ userEmail }: AppHeaderProps) {
     const pathname = usePathname()
     const [isPricingOpen, setIsPricingOpen] = useState(false)
-  const [currentPlanId, setCurrentPlanId] = useState<string>('free')
+    const [currentPlanId, setCurrentPlanId] = useState<string>('free')
 
-  useEffect(() => {
-    const supabase = createClient()
-    supabase
-      .from('user_subscriptions')
-      .select('plan_id')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.plan_id) setCurrentPlanId(data.plan_id)
-      })
-      .catch(() => {})
-  }, [])
+    useEffect(() => {
+        (async () => {
+            try {
+                const supabase = createClient()
+                const { data } = await supabase
+                    .from('user_subscriptions')
+                    .select('plan_id')
+                    .maybeSingle()
+
+                if (data?.plan_id) setCurrentPlanId(data.plan_id)
+            } catch (e) {
+                // opcional: console.warn(e)
+            }
+        })()
+    }, [])
 
     const navigation = [
         { name: 'Dashboard', href: '/app/dashboard' },
@@ -57,19 +61,19 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                             ))}
                         </div>
                     </div>
-          <div className="flex items-center gap-4">
-            {/* Upgrade Button */}
-            {currentPlanId !== 'agency' && (
-              <button
-                onClick={() => setIsPricingOpen(true)}
-                className="hidden sm:inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:from-yellow-500 hover:to-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-500"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                  <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
-                </svg>
-                Mejorar Plan
-              </button>
-            )}
+                    <div className="flex items-center gap-4">
+                        {/* Upgrade Button */}
+                        {currentPlanId !== 'agency' && (
+                            <button
+                                onClick={() => setIsPricingOpen(true)}
+                                className="hidden sm:inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:from-yellow-500 hover:to-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-500"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
+                                </svg>
+                                Mejorar Plan
+                            </button>
+                        )}
 
                         {/* User Dropdown */}
                         <Menu as="div" className="relative ml-3">
