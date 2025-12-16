@@ -17,4 +17,5 @@ COPY . .
 RUN npm run build || echo "build skipped"
 
 # Comando del worker
-CMD ["npm", "run", "worker"]
+CMD ["bash", "-lc", "mkdir -p /app/secrets && if [ -n \"$GCP_SERVICE_ACCOUNT_JSON\" ]; then echo \"$GCP_SERVICE_ACCOUNT_JSON\" > /app/secrets/gen-lang-client-0412493534-def18059d5a5.json; fi && npm run worker"]
+
