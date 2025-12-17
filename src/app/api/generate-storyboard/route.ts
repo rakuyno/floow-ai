@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { NextResponse } from 'next/server'
-import { adjustUserTokens } from '@/lib/tokens'
+import { getUserTokenBalance } from '@/lib/tokens'
 
 // Initialize Supabase Admin Client (Service Role) for token adjustments
 const supabaseAdmin = createClient(
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
             avatar_image_url,
             avatar_id,
             video_mode,
-            num_scenes = 4, // Default to 4 if not provided
+            num_scenes = 3, // Default to 3 to match 30 free tokens
             reference_script = null, // Optional reference script from user
             target_language = 'es',
             feedback = '' // Optional improvement feedback from user
@@ -61,19 +61,12 @@ export async function POST(req: Request) {
         const tokensPerScene = 10 // Fixed cost per scene
         const totalTokensNeeded = num_scenes * tokensPerScene
 
-        // 3. Deduct Tokens
-        const deduction = await adjustUserTokens(
-            supabaseAdmin,
-            user.id,
-            -totalTokensNeeded,
-            `generation_${audio_mode === 'raw' ? 'raw' : 'tts'}`,
-            { session_id, num_scenes, video_type }
-        )
-
-        if (!deduction.success) {
+        // 3. Balance check only (real charge happens in worker)
+        const currentBalance = await getUserTokenBalance(supabaseAdmin, user.id)
+        if ((currentBalance || 0) < totalTokensNeeded) {
             return NextResponse.json({
                 error: 'Insufficient tokens',
-                details: deduction.error
+                details: `Required: ${totalTokensNeeded}, Balance: ${currentBalance}`
             }, { status: 402 }) // Payment Required
         }
 

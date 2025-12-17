@@ -40,7 +40,7 @@ export default function QuestionnairePage() {
     avatar_image_url: null,
     avatar_id: null,
     avatar_name: null,
-    num_scenes: 4, // Default to 4 scenes
+    num_scenes: 3, // Default to 3 scenes (30 tokens for free users)
     target_language: 'es' // Default to Spanish
   })
 
@@ -71,7 +71,8 @@ export default function QuestionnairePage() {
 
   // Calculate Token Cost (simplified - fixed 10 tokens per scene)
   const totalCost = formData.num_scenes * 10
-  const hasInsufficientTokens = tokenBalance !== null && tokenBalance < totalCost
+  const isBalanceLoading = tokenBalance === null
+  const hasInsufficientTokens = !isBalanceLoading && tokenBalance < totalCost
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -489,10 +490,16 @@ export default function QuestionnairePage() {
             </button>
             <button
               type="submit"
-              disabled={loading || hasInsufficientTokens}
+              disabled={loading || isBalanceLoading || hasInsufficientTokens}
               className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 font-medium shadow-sm"
             >
-              {loading ? 'Guardando...' : hasInsufficientTokens ? 'Saldo insuficiente' : 'Continuar al Storyboard'}
+              {loading
+                ? 'Guardando...'
+                : hasInsufficientTokens
+                  ? 'Saldo insuficiente'
+                  : isBalanceLoading
+                    ? 'Cargando saldo...'
+                    : 'Continuar al Storyboard'}
             </button>
           </div>
 
