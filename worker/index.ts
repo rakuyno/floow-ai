@@ -22,7 +22,6 @@ import {
 } from './lib/video-processing'
 import {
   getUserPlan,
-  checkTokenBalance,
   deductTokens,
   refundTokens,
   TOKENS_PER_SCENE
@@ -296,15 +295,20 @@ async function processJob(job: any) {
     const audioModeRaw = String(brief.audio_mode ?? 'raw').toLowerCase().trim()
     const audioMode = audioModeRaw === 'tts' ? 'voiceover' : audioModeRaw === 'raw' ? 'raw' : 'voiceover' // enforce known modes
 
-    // 3. Billing: Check & Deduct Tokens
+    // 3. Billing: Deduct Tokens (atomic RPC) — refunds handled on failure
     cost = scenes.length * TOKENS_PER_SCENE
-    const hasBalance = await checkTokenBalance(supabase, userId, cost)
-    if (!hasBalance) {
-      throw new Error(`Insufficient tokens. Required: ${cost}`)
+    try {
+      const deduction = await deductTokens(supabase, userId, cost, job.id)
+      console.log(`[Job ${job.id}] Tokens deducted. Prev=${deduction.previous_balance} New=${deduction.new_balance} Required=${cost}`)
+      isRefundNeeded = true // If we fail after this, we refund
+    } catch (deductErr: any) {
+      if (deductErr?.code === 'INSUFFICIENT_TOKENS') {
+        const bal = deductErr.current_balance ?? 'desconocido'
+        const req = deductErr.required ?? cost
+        throw new Error(`Insufficient tokens. Balance: ${bal}, Required: ${req}`)
+      }
+      throw deductErr
     }
-
-    await deductTokens(supabase, userId, cost, job.id)
-    isRefundNeeded = true // If we fail after this, we refund
 
     // 4. Billing: Check Plan (Watermark)
     const planId = await getUserPlan(supabase, userId)

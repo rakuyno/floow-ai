@@ -69,7 +69,7 @@ export async function deductTokens(
     amount: number,
     jobId: string,
     reason: string = 'video_generation'
-): Promise<void> {
+): Promise<{ previous_balance?: number; new_balance?: number; deducted?: number; current_balance?: number; required?: number }> {
     const { data, error } = await supabase.rpc('deduct_tokens', {
         p_user_id: userId,
         p_amount: amount,
@@ -83,10 +83,21 @@ export async function deductTokens(
     }
 
     if (data && !data.success) {
-        throw new Error(`Failed to deduct tokens: ${data.error}`)
+        const err: any = new Error(`INSUFFICIENT_TOKENS: ${data.error || 'unknown'}`)
+        err.code = 'INSUFFICIENT_TOKENS'
+        err.current_balance = data.current_balance
+        err.required = data.required
+        throw err
     }
 
     console.log(`[Billing] Deducted ${amount} tokens from user ${userId}. New balance: ${data?.new_balance}`)
+    return {
+        previous_balance: data?.previous_balance,
+        new_balance: data?.new_balance,
+        deducted: data?.deducted,
+        current_balance: data?.current_balance,
+        required: data?.required
+    }
 }
 
 /**

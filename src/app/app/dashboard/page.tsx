@@ -1,7 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
 import AdActions from './ad-actions'
 import TokenCounter from '@/components/TokenCounter'
 import ErrorHintBubble from '@/components/ErrorHintBubble'
@@ -29,6 +27,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
     .select(`
       *,
       render_jobs (
+        id,
         status,
         output_url,
         kind,
@@ -39,6 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
     `)
     .eq('user_id', user?.id)
     .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false, referencedTable: 'render_jobs' })
 
   const filtered = (sessions || []).filter((s) => {
     const lastJob = s.render_jobs?.[0]
@@ -59,6 +59,50 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   const start = (currentPage - 1) * PAGE_SIZE
   const end = start + PAGE_SIZE
   const paginated = filtered.slice(start, end)
+
+  const formatDateTime = (value: string) => {
+    const date = new Date(value)
+    return `${date.toLocaleString('es-ES', {
+      timeZone: 'UTC',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })} UTC`
+  }
+
+  const jobIds = paginated
+    .map((session) => session.render_jobs?.[0]?.id)
+    .filter((id): id is string => Boolean(id))
+
+  const jobCosts = new Map<string, number>()
+
+  if (jobIds.length > 0) {
+    const orFilter = jobIds.map((id) => `metadata->>job_id.eq.${id}`).join(',')
+    const { data: ledgerRows, error: ledgerError } = await supabase
+      .from('user_token_ledger')
+      .select('change, metadata')
+      .or(orFilter)
+
+    if (ledgerError) {
+      console.error('Error fetching token ledger', ledgerError)
+    } else {
+      for (const row of ledgerRows || []) {
+        const jobId = typeof row.metadata?.job_id === 'string' ? row.metadata.job_id : null
+        if (!jobId) continue
+        const current = jobCosts.get(jobId) ?? 0
+        jobCosts.set(jobId, current + (row.change ?? 0))
+      }
+    }
+  }
+
+  const getJobCost = (jobId?: string | null, isFailed?: boolean): number | null => {
+    if (!jobId) return isFailed ? 0 : null
+    const net = jobCosts.get(jobId)
+    if (net === undefined) return isFailed ? 0 : null
+    return Math.abs(Math.min(net, 0))
+  }
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -121,6 +165,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               const isDone = lastJob && (lastJob.status === 'done' || lastJob.status === 'completed')
               const isProcessing = lastJob?.status === 'processing' || lastJob?.status === 'queued'
               const isFailed = lastJob?.status === 'failed'
+              const jobCost = getJobCost(lastJob?.id, isFailed)
 
               const getFriendlyError = (msg: string | null | undefined): string => {
                 if (!msg) return 'No se pudo generar el video.'
@@ -161,10 +206,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                   </div>
 
                   <div className="text-xs text-gray-500 mb-4">
-                    Creado {formatDistanceToNow(new Date(session.created_at), { addSuffix: true, locale: es })}
+                    Creado: {formatDateTime(session.created_at)}
                   </div>
 
-                  <div className="border-t pt-3 flex justify-end">
+                  <div className="border-t pt-3 flex items-center justify-between">
+                    <div className="text-[11px] text-gray-500">
+                      Coste: {jobCost !== null ? `${jobCost} tokens` : '—'}
+                    </div>
                     {isDone && lastJob?.output_url ? (
                       <AdActions outputUrl={lastJob.output_url} hasWatermark={showWatermarkActions} />
                     ) : isProcessing ? (
@@ -207,6 +255,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                         Creado
                       </th>
+                      <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                        Coste
+                      </th>
                       <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
                         <span className="sr-only">Acciones</span>
                       </th>
@@ -221,6 +272,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                       const isDone = lastJob && (lastJob.status === 'done' || lastJob.status === 'completed')
                       const isProcessing = lastJob?.status === 'processing' || lastJob?.status === 'queued'
                       const isFailed = lastJob?.status === 'failed'
+                      const jobCost = getJobCost(lastJob?.id, isFailed)
 
                       const getFriendlyError = (msg: string | null | undefined): string => {
                         if (!msg) return 'No se pudo generar el video.'
@@ -260,7 +312,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                            {formatDistanceToNow(new Date(session.created_at), { addSuffix: true, locale: es })}
+                            {formatDateTime(session.created_at)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
+                            {jobCost !== null ? `${jobCost} tokens` : '—'}
                           </td>
                           <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             {isDone && lastJob?.output_url ? (
@@ -284,7 +339,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                     })}
                     {(paginated.length === 0) && (
                       <tr>
-                        <td colSpan={4} className="text-center py-8 text-gray-500">
+                        <td colSpan={5} className="text-center py-8 text-gray-500">
                           No tienes anuncios creados. ¡Crea el primero!
                         </td>
                       </tr>
