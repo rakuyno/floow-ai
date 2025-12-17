@@ -28,6 +28,10 @@ import {
 } from './lib/billing'
 import { type ElevenLabsVoiceProfile } from './lib/elevenlabs'
 
+console.log('[ENV] SUPABASE_URL=', process.env.SUPABASE_URL);
+console.log('[ENV] SERVICE_ROLE prefix=', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 8));
+
+
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), '.env.local') })
 
@@ -295,13 +299,24 @@ async function processJob(job: any) {
     const audioModeRaw = String(brief.audio_mode ?? 'raw').toLowerCase().trim()
     const audioMode = audioModeRaw === 'tts' ? 'voiceover' : audioModeRaw === 'raw' ? 'raw' : 'voiceover' // enforce known modes
 
+
+
     // 3. Billing: Deduct Tokens (atomic RPC) — refunds handled on failure
     cost = scenes.length * TOKENS_PER_SCENE
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'worker/index.ts:cost',message:'About to deduct tokens',data:{jobId:job.id,userId,sessionId:job.session_id,cost},timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
       const deduction = await deductTokens(supabase, userId, cost, job.id)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'worker/index.ts:cost',message:'Deduction success',data:{jobId:job.id,userId,sessionId:job.session_id,cost,deduction},timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
       console.log(`[Job ${job.id}] Tokens deducted. Prev=${deduction.previous_balance} New=${deduction.new_balance} Required=${cost}`)
       isRefundNeeded = true // If we fail after this, we refund
     } catch (deductErr: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'worker/index.ts:cost',message:'Deduction error',data:{jobId:job.id,userId,sessionId:job.session_id,cost,errorMessage:deductErr?.message,current_balance:deductErr?.current_balance,required:deductErr?.required},timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
       if (deductErr?.code === 'INSUFFICIENT_TOKENS') {
         const bal = deductErr.current_balance ?? 'desconocido'
         const req = deductErr.required ?? cost

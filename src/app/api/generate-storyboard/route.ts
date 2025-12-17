@@ -63,6 +63,9 @@ export async function POST(req: Request) {
 
         // 3. Balance check only (real charge happens in worker)
         const currentBalance = await getUserTokenBalance(supabaseAdmin, user.id)
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'api/generate-storyboard:balance',message:'Balance check before storyboard',data:{userId:user.id,sessionId,required:totalTokensNeeded,balance:currentBalance},timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
         if ((currentBalance || 0) < totalTokensNeeded) {
             return NextResponse.json({
                 error: 'Insufficient tokens',
