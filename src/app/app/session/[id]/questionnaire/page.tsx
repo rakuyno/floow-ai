@@ -92,7 +92,12 @@ export default function QuestionnairePage() {
     setLoading(true)
 
     try {
-      const videoTypeDb = formData.video_type === 'broll' ? 'product_only' : formData.video_type
+      // Map frontend video_type values to database values
+      let videoTypeDb = formData.video_type
+      if (formData.video_type === 'broll') videoTypeDb = 'product_only'
+      if (formData.video_type === 'avatar') videoTypeDb = 'avatar_only'
+      // 'mixed' stays as 'mixed'
+      
       const sellingPointsArray = formData.selling_points.split('\n').filter(Boolean)
 
       // Calculate videoMode based on audio selection
