@@ -12,6 +12,50 @@ export default function TokenCounter({ className = '' }: { className?: string })
     useEffect(() => {
         console.log('[TokenCounter] Component mounted, fetching balance...')
         fetchBalance()
+
+        // Poll every 5 seconds to keep balance updated
+        const pollInterval = setInterval(() => {
+            fetchBalance()
+        }, 5000)
+
+        // Set up realtime subscription to user_token_balances
+        let realtimeChannel: ReturnType<typeof supabase.channel> | null = null
+        
+        const setupRealtimeSubscription = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            console.log('[TokenCounter] Setting up realtime subscription for user:', user.id)
+            
+            realtimeChannel = supabase
+                .channel('token-balance-changes')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'user_token_balances',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    (payload) => {
+                        console.log('[TokenCounter] Realtime update received:', payload)
+                        if (payload.new && 'balance' in payload.new) {
+                            setBalance((payload.new as any).balance)
+                        }
+                    }
+                )
+                .subscribe()
+        }
+
+        setupRealtimeSubscription()
+
+        return () => {
+            clearInterval(pollInterval)
+            if (realtimeChannel) {
+                console.log('[TokenCounter] Cleaning up realtime subscription')
+                realtimeChannel.unsubscribe()
+            }
+        }
     }, [])
 
     const fetchBalance = async () => {

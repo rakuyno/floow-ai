@@ -222,8 +222,6 @@ export async function addWatermark(inputPath: string, outputPath: string): Promi
                         '-movflags +faststart',
                         '-c:a copy'
                     ])
-                    .on('start', (cmd) => console.log('[VIDEO] ffmpeg watermark cmd:', cmd))
-                    .on('stderr', (line) => console.log('[VIDEO][ffmpeg]', line))
                     .save(outputPath)
                     .on('end', () => resolve())
                     .on('error', (err) => {
