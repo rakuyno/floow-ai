@@ -210,13 +210,20 @@ export async function addWatermark(inputPath: string, outputPath: string): Promi
                     .complexFilter([
                         // Fade watermark to 30% opacity and center it
                         '[1:v]format=rgba,colorchannelmixer=aa=0.3[wm]',
-                        '[0:v][wm]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2:format=auto:eval=init[outv]'
-                    ], 'outv')
+                        '[0:v][wm]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2:format=auto:eval=init[v]'
+                    ])
                     .outputOptions([
-                        '-map [outv]',
+                        '-map [v]',
                         '-map 0:a?',
+                        '-c:v libx264',
+                        '-preset veryfast',
+                        '-crf 18',
+                        '-pix_fmt yuv420p',
+                        '-movflags +faststart',
                         '-c:a copy'
                     ])
+                    .on('start', (cmd) => console.log('[VIDEO] ffmpeg watermark cmd:', cmd))
+                    .on('stderr', (line) => console.log('[VIDEO][ffmpeg]', line))
                     .save(outputPath)
                     .on('end', () => resolve())
                     .on('error', (err) => {
