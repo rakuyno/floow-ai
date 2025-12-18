@@ -1,6 +1,11 @@
 import * as fs from 'fs'
 import path from 'path'
+import os from 'os'
+import axios from 'axios'
 import ffmpeg from 'fluent-ffmpeg'
+
+const WATERMARK_URL = 'https://nxdfwseqxdtfghaxvrwp.supabase.co/storage/v1/object/public/assets/floow_watermark.png'
+let cachedWatermarkPath: string | null = null
 
 export type TextOverlay = {
     sceneIndex: number
@@ -174,29 +179,54 @@ export async function addWatermark(inputPath: string, outputPath: string): Promi
     return new Promise((resolve, reject) => {
         console.log(`[VIDEO] Adding watermark to ${inputPath}`)
 
-        // Watermark text
-        const text = "CREATED WITH ANUNCIOS UGC"
+        async function ensureWatermarkAsset(): Promise<string> {
+            // Reuse cached asset when possible to avoid repeated downloads
+            if (cachedWatermarkPath && fs.existsSync(cachedWatermarkPath)) {
+                return cachedWatermarkPath
+            }
 
-        // Draw text in center with some opacity
-        // escaping single quotes: ' -> '\'', : -> \:
-        const filterString = `drawtext=text='${text}':fontsize=36:fontcolor=white@0.5:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.5:shadowx=2:shadowy=2`
+            const tmpPath = path.join(os.tmpdir(), 'floow_watermark.png')
+            if (fs.existsSync(tmpPath)) {
+                cachedWatermarkPath = tmpPath
+                return tmpPath
+            }
 
-        ffmpeg(inputPath)
-            .videoFilters(filterString)
-            .outputOptions('-c:a copy')
-            .save(outputPath)
-            .on('end', () => resolve())
-            .on('error', (err) => {
-                console.error('[VIDEO] Watermark failed:', err)
-                // Fallback: copy without watermark
-                try {
-                    fs.copyFileSync(inputPath, outputPath)
-                } catch (copyErr) {
-                    console.error('[VIDEO] Fallback copy failed:', copyErr)
-                    reject(err)
-                    return
-                }
-                resolve()
+            const response = await axios.get<ArrayBuffer>(WATERMARK_URL, { responseType: 'arraybuffer' })
+            if (response.status !== 200 || !response.data) {
+                throw new Error(`Failed to download watermark asset: status ${response.status}`)
+            }
+
+            const buffer = Buffer.from(response.data)
+            await fs.promises.writeFile(tmpPath, buffer)
+            cachedWatermarkPath = tmpPath
+            return tmpPath
+        }
+
+        ensureWatermarkAsset()
+            .then((watermarkPath) => {
+                ffmpeg()
+                    .input(inputPath)
+                    .input(watermarkPath)
+                    .complexFilter([
+                        // Fade watermark to 30% opacity and center it
+                        '[1:v]format=rgba,colorchannelmixer=aa=0.3[wm]',
+                        '[0:v][wm]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2:format=auto:eval=init[outv]'
+                    ], 'outv')
+                    .outputOptions([
+                        '-map [outv]',
+                        '-map 0:a?',
+                        '-c:a copy'
+                    ])
+                    .save(outputPath)
+                    .on('end', () => resolve())
+                    .on('error', (err) => {
+                        console.error('[VIDEO] Watermark failed:', err)
+                        reject(err)
+                    })
+            })
+            .catch((err) => {
+                console.error('[VIDEO] Unable to prepare watermark asset:', err)
+                reject(err)
             })
     })
 }
