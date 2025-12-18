@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         // 3. Balance check only (real charge happens in worker)
         const currentBalance = await getUserTokenBalance(supabaseAdmin, user.id)
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'api/generate-storyboard:balance',message:'Balance check before storyboard',data:{userId:user.id,sessionId,required:totalTokensNeeded,balance:currentBalance},timestamp:Date.now()})}).catch(()=>{})
+        fetch('http://127.0.0.1:7242/ingest/e1f7b8b0-81a2-4d1e-9e1b-0200dc15d131',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'api/generate-storyboard:balance',message:'Balance check before storyboard',data:{userId:user.id,sessionId:session_id,required:totalTokensNeeded,balance:currentBalance},timestamp:Date.now()})}).catch(()=>{})
         // #endregion
         if ((currentBalance || 0) < totalTokensNeeded) {
             return NextResponse.json({
@@ -241,6 +241,7 @@ Genera un guion UGC en formato JSON siguiendo TODAS las reglas del systemPrompt 
         }))
 
         // 10. Save to database (upsert to allow regenerations)
+        console.log('[generate-storyboard] ⚠️ VERSION 2.0 - NO TOKEN CHARGE - Saving storyboard to DB...')
         const { error } = await supabaseAdmin.from('storyboards').upsert({
             session_id,
             summary: `Anuncio ${video_type} para ${product_name}`,
@@ -251,6 +252,7 @@ Genera un guion UGC en formato JSON siguiendo TODAS las reglas del systemPrompt 
 
         if (error) throw error
 
+        console.log('[generate-storyboard] ✅ Storyboard saved, NO TOKENS CHARGED HERE')
         return NextResponse.json(result)
 
     } catch (error: any) {
