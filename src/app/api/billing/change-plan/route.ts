@@ -8,14 +8,14 @@ export async function POST(req: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return new NextResponse('Unauthorized', { status: 401 });
+            return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
         }
 
         const body = await req.json();
         const { targetPlanId } = body;
 
         if (!targetPlanId || !Object.values(PLANS).includes(targetPlanId)) {
-            return new NextResponse('Invalid plan ID', { status: 400 });
+            return NextResponse.json({ ok: false, error: 'Invalid plan ID' }, { status: 400 });
         }
 
         console.log('[BILLING] Change plan request:', { userId: user.id, targetPlanId });
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
         if (subError) {
             console.error('[BILLING] Error fetching subscription:', subError);
-            return new NextResponse('Error fetching subscription', { status: 500 });
+            return NextResponse.json({ ok: false, error: 'Error fetching subscription' }, { status: 500 });
         }
 
         const currentPlanId = userSub.plan_id;
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
             }
 
             if (!userSub.stripe_subscription_id) {
-                return new NextResponse('No active subscription to cancel', { status: 400 });
+                return NextResponse.json({ ok: false, error: 'No active subscription to cancel' }, { status: 400 });
             }
 
             // Cancel at period end
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
             return NextResponse.json({
                 ok: true,
-                action: 'canceling',
+                action: 'cancel_scheduled',
                 effectiveDate: userSub.current_period_end,
                 message: 'Subscription will be canceled at the end of the billing period'
             });
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 ok: false,
                 needsCheckout: true,
-                message: 'Please complete checkout to subscribe'
+                error: 'Please complete checkout to subscribe'
             });
         }
 
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 
         const targetPriceId = STRIPE_PRICES[targetPlanId as keyof typeof STRIPE_PRICES];
         if (!targetPriceId) {
-            return new NextResponse('Price not configured for target plan', { status: 500 });
+            return NextResponse.json({ ok: false, error: 'Price not configured for target plan' }, { status: 500 });
         }
 
         // Fallback: Lookup subscription if missing stripe_subscription_id
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
             console.warn('[BILLING] Missing stripe_subscription_id, attempting lookup...');
             
             if (!userSub.stripe_customer_id) {
-                return new NextResponse('No Stripe customer found', { status: 400 });
+                return NextResponse.json({ ok: false, error: 'No Stripe customer found' }, { status: 400 });
             }
 
             const subs = await stripe.subscriptions.list({
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
             });
 
             if (subs.data.length === 0) {
-                return new NextResponse('No active subscription found', { status: 400 });
+                return NextResponse.json({ ok: false, error: 'No active subscription found' }, { status: 400 });
             }
 
             subscriptionId = subs.data[0].id;
@@ -250,13 +250,13 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             ok: true,
-            action: 'scheduled',
+                action: 'downgrade_scheduled',
             effectiveDate: new Date(periodEnd * 1000).toISOString(),
-            message: 'Plan change scheduled for end of billing period'
+                message: 'Plan change scheduled for end of billing period'
         });
 
     } catch (error: any) {
         console.error('[BILLING] Change plan error:', error);
-        return new NextResponse(error.message || 'Internal Error', { status: 500 });
+        return NextResponse.json({ ok: false, error: error.message || 'Internal Error' }, { status: 500 });
     }
 }

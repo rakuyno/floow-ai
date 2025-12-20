@@ -36,7 +36,7 @@ function BillingContent() {
     const [ledger, setLedger] = useState<LedgerEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
-    const [showPlanSelector, setShowPlanSelector] = useState(false);
+    const [showPlanModal, setShowPlanModal] = useState(false);
 
     const supabase = createClient();
     const router = useRouter();
@@ -125,45 +125,68 @@ function BillingContent() {
                 body: JSON.stringify({ targetPlanId })
             });
 
-            const result = await response.json();
+            const contentType = response.headers.get('content-type');
+            let result: any = null;
+
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                console.error('[Billing] Non-JSON response:', text);
+                throw new Error('Error al cambiar plan. Revisa logs.');
+            }
 
             if (!response.ok) {
-                throw new Error(result.error || 'Failed to change plan');
+                throw new Error(result?.error || 'Error al cambiar plan. Revisa logs.');
             }
 
             if (result.needsCheckout) {
-                // User is on free, need checkout
+                // Si el backend ya trae checkoutUrl, úsalo; si no, llama a checkout
+                if (result.checkoutUrl) {
+                    window.location.href = result.checkoutUrl;
+                    return;
+                }
+
                 const checkoutResponse = await fetch('/api/billing/checkout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ planId: targetPlanId })
                 });
 
-                if (!checkoutResponse.ok) throw new Error('Failed to create checkout session');
+                const checkoutContentType = checkoutResponse.headers.get('content-type');
+                if (!checkoutContentType || !checkoutContentType.includes('application/json')) {
+                    const text = await checkoutResponse.text();
+                    console.error('[Billing] Non-JSON response from checkout:', text);
+                    throw new Error('Error al iniciar checkout. Revisa logs.');
+                }
 
                 const { url } = await checkoutResponse.json();
+                if (!url) throw new Error('Checkout URL missing');
                 window.location.href = url;
                 return;
             }
 
-            // Success - show message based on action
+            if (!result.ok) {
+                throw new Error(result.error || 'Error al cambiar plan. Revisa logs.');
+            }
+
+            // Mensajes según acción
             if (result.action === 'upgraded') {
                 niceAlert('✅ Plan actualizado inmediatamente');
-            } else if (result.action === 'scheduled') {
-                const date = new Date(result.effectiveDate).toLocaleDateString();
+            } else if (result.action === 'downgrade_scheduled') {
+                const date = result.effectiveDate ? new Date(result.effectiveDate).toLocaleDateString() : '';
                 niceAlert(`📅 Cambio programado para el ${date}`);
-            } else if (result.action === 'canceling') {
-                const date = new Date(result.effectiveDate).toLocaleDateString();
+            } else if (result.action === 'cancel_scheduled') {
+                const date = result.effectiveDate ? new Date(result.effectiveDate).toLocaleDateString() : '';
                 niceAlert(`🗓️ Se cancelará el ${date}`);
             }
 
-            // Refresh data
             await fetchData();
-            setShowPlanSelector(false);
+            setShowPlanModal(false);
 
         } catch (error: any) {
             console.error('[Billing] Error changing plan:', error);
-            niceAlert(error.message || 'Error al cambiar el plan');
+            niceAlert(error.message || 'Error al cambiar plan. Revisa logs.');
         } finally {
             setProcessing(false);
         }
@@ -198,22 +221,6 @@ function BillingContent() {
     const currentPlanId = subscription?.plan_id || 'free';
     const planOrder = ['free', 'starter', 'growth', 'agency'];
     const currentPlanIndex = planOrder.indexOf(currentPlanId);
-
-    // Determine available actions
-    const canUpgrade = currentPlanIndex < 3; // Not on agency
-    const canDowngrade = currentPlanIndex > 0 && currentPlanIndex < 3; // Between starter and growth
-    const canCancelToFree = currentPlanId !== 'free';
-
-    // Get available upgrade/downgrade options
-    const upgradeOptions = plans.filter(plan => {
-        const planIndex = planOrder.indexOf(plan.id);
-        return planIndex > currentPlanIndex;
-    });
-
-    const downgradeOptions = plans.filter(plan => {
-        const planIndex = planOrder.indexOf(plan.id);
-        return planIndex < currentPlanIndex && plan.id !== 'free';
-    });
 
     // Check if subscription is canceling
     const isCanceling = subscription?.status === 'canceling' || subscription?.pending_plan_id === 'free';
@@ -287,123 +294,98 @@ function BillingContent() {
                     <p className="text-sm text-gray-500 mt-1">Disponibles para generar</p>
                 </div>
                 <div className="flex flex-col gap-2 justify-center items-end">
-                    {/* ✅ New: Smart buttons based on plan */}
-                    {currentPlanId !== 'free' && !isCanceling && (
-                        <>
-                            {(canUpgrade || canDowngrade) && (
-                                <button
-                                    onClick={() => setShowPlanSelector(!showPlanSelector)}
-                                    disabled={processing}
-                                    className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors"
-                                >
-                                    Cambiar Plan
-                                </button>
-                            )}
-                            
-                            <button
-                                onClick={() => handleChangePlan('free')}
-                                disabled={processing}
-                                className="w-full sm:w-auto px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 text-sm font-medium transition-colors"
-                            >
-                                Pasar a Free
-                            </button>
-
-                            <button
-                                onClick={handleManagePaymentMethod}
-                                disabled={processing}
-                                className="w-full sm:w-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 text-sm font-medium transition-colors"
-                            >
-                                Gestionar Método de Pago
-                            </button>
-                        </>
+                    {/* Botón principal: Cambiar plan */}
+                    <button
+                        onClick={() => setShowPlanModal(true)}
+                        disabled={processing}
+                        className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                    >
+                        Cambiar plan
+                    </button>
+                    {/* Botón secundario: Portal (pago/facturas) */}
+                    {currentPlanId !== 'free' && (
+                        <button
+                            onClick={handleManagePaymentMethod}
+                            disabled={processing}
+                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 underline underline-offset-4 disabled:opacity-50"
+                        >
+                            Gestionar método de pago / facturas
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Plan Selector (visible when "Cambiar Plan" is clicked) */}
-            {showPlanSelector && !isCanceling && (
-                <div className="bg-white rounded-xl shadow p-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Selecciona tu nuevo plan</h2>
-                    
-                    {upgradeOptions.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="text-sm font-medium text-gray-700 mb-3">✨ Upgrades</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {upgradeOptions.map(plan => (
-                                    <button
-                                        key={plan.id}
-                                        onClick={() => handleChangePlan(plan.id)}
-                                        disabled={processing}
-                                        className="border-2 border-green-200 rounded-lg p-4 hover:border-green-400 hover:bg-green-50 disabled:opacity-50 text-left transition-colors"
-                                    >
-                                        <p className="font-semibold text-gray-900">{plan.name}</p>
-                                        <p className="text-2xl font-bold text-green-600 my-2">
-                                            €{plan.monthly_price_cents / 100}/mo
-                                        </p>
-                                        <p className="text-sm text-gray-600">{plan.monthly_tokens} tokens/mes</p>
-                                        <p className="text-xs text-green-600 mt-2">Cambio inmediato + prorrateo</p>
-                                    </button>
-                                ))}
+            {/* Modal de cambio de plan (cards simples) */}
+            {showPlanModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-5xl w-full p-6 relative">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 className="text-2xl font-semibold text-gray-900">Cambiar plan</h2>
+                                <p className="text-sm text-gray-600">Selecciona el plan que mejor se adapte.</p>
                             </div>
+                            <button
+                                onClick={() => setShowPlanModal(false)}
+                                className="text-gray-500 hover:text-gray-700"
+                                aria-label="Cerrar"
+                            >
+                                ✕
+                            </button>
                         </div>
-                    )}
 
-                    {downgradeOptions.length > 0 && (
-                        <div>
-                            <h3 className="text-sm font-medium text-gray-700 mb-3">📉 Downgrades</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {downgradeOptions.map(plan => (
-                                    <button
-                                        key={plan.id}
-                                        onClick={() => handleChangePlan(plan.id)}
-                                        disabled={processing}
-                                        className="border-2 border-blue-200 rounded-lg p-4 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50 text-left transition-colors"
-                                    >
-                                        <p className="font-semibold text-gray-900">{plan.name}</p>
-                                        <p className="text-2xl font-bold text-blue-600 my-2">
-                                            €{plan.monthly_price_cents / 100}/mo
-                                        </p>
-                                        <p className="text-sm text-gray-600">{plan.monthly_tokens} tokens/mes</p>
-                                        <p className="text-xs text-blue-600 mt-2">
-                                            Aplicará en próxima renovación
-                                        </p>
-                                    </button>
-                                ))}
+                        {/* Banner de cambio programado */}
+                        {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
+                            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                                Cambio programado a <strong>{plans.find(p => p.id === subscription.pending_plan_id)?.name}</strong> el{' '}
+                                <strong>{subscription.pending_effective_date ? new Date(subscription.pending_effective_date).toLocaleDateString() : ''}</strong>.
                             </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                            {plans.map(plan => {
+                                const planIndex = planOrder.indexOf(plan.id);
+                                const currentIndex = planOrder.indexOf(currentPlanId);
+                                const isCurrent = plan.id === currentPlanId;
+                                const isUpgrade = planIndex > currentIndex;
+                                const isDowngrade = planIndex < currentIndex;
+
+                                let ctaLabel = 'Seleccionar';
+                                if (isCurrent) ctaLabel = 'Plan actual';
+                                else if (plan.id === 'free') ctaLabel = 'Cancelar (fin de periodo)';
+                                else if (isUpgrade) ctaLabel = `Cambiar a ${plan.name} (inmediato + prorrateo)`;
+                                else if (isDowngrade) ctaLabel = `Cambiar a ${plan.name} (próxima renovación)`;
+
+                                return (
+                                    <div key={plan.id} className="border rounded-xl p-4 flex flex-col">
+                                        <div className="mb-2">
+                                            <p className="text-sm text-gray-500 uppercase">{plan.id === 'free' ? 'Gratis' : 'Plan'}</p>
+                                            <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
+                                        </div>
+                                        <div className="mb-4">
+                                            <p className="text-3xl font-bold text-gray-900">
+                                                {plan.monthly_price_cents === 0 ? '€0' : `€${plan.monthly_price_cents / 100}`}
+                                            </p>
+                                            <p className="text-sm text-gray-500">/mes · {plan.monthly_tokens} tokens</p>
+                                        </div>
+                                        <div className="flex-1 mb-4 text-sm text-gray-600 space-y-1">
+                                            <p>• Tokens mensuales: {plan.monthly_tokens}</p>
+                                            <p>• Sin marca de agua {plan.id === 'free' ? '(no aplica)' : ''}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleChangePlan(plan.id)}
+                                            disabled={processing || isCurrent}
+                                            className={`mt-auto w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                                                isCurrent
+                                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+                                            }`}
+                                        >
+                                            {processing && !isCurrent ? 'Procesando...' : ctaLabel}
+                                        </button>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    )}
-                </div>
-            )}
-
-            {/* Plans Grid for Free users */}
-            {currentPlanId === 'free' && (
-                <div>
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Planes Disponibles</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {plans.filter(p => p.id !== 'free').map((plan) => (
-                            <div key={plan.id} className="border rounded-xl p-6 flex flex-col border-gray-200">
-                                <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
-                                <div className="mt-4 mb-6">
-                                    <span className="text-3xl font-bold text-gray-900">€{plan.monthly_price_cents / 100}</span>
-                                    <span className="text-gray-500">/mo</span>
-                                </div>
-                                <ul className="space-y-3 mb-6 flex-1">
-                                    <li className="flex items-center text-sm text-gray-600">
-                                        <span className="mr-2">🪙</span> {plan.monthly_tokens} tokens/mo
-                                    </li>
-                                    <li className="flex items-center text-sm text-gray-600">
-                                        <span className="mr-2">✨</span> Sin Marca de Agua
-                                    </li>
-                                </ul>
-                                <button
-                                    onClick={() => handleChangePlan(plan.id)}
-                                    disabled={processing}
-                                    className="w-full py-2 rounded-lg font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    {processing ? 'Procesando...' : 'Suscribirse'}
-                                </button>
-                            </div>
-                        ))}
                     </div>
                 </div>
             )}
