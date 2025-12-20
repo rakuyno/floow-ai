@@ -167,20 +167,22 @@ export async function POST(req: NextRequest) {
 
         const periodEnd = subscription.current_period_end;
 
-        // Check if schedule already exists for this subscription
-        const existingSchedules = await stripe.subscriptionSchedules.list({
-            subscription: subscriptionId,
-            limit: 1
-        });
-
-        if (existingSchedules.data.length > 0) {
-            // Update existing schedule
-            const schedule = existingSchedules.data[0];
+        // Check if subscription already has a schedule
+        let scheduleId = subscription.schedule;
+        
+        if (scheduleId) {
+            // Schedule exists - retrieve and update it
+            console.log('[BILLING] Found existing schedule:', scheduleId);
             
+            const schedule = await stripe.subscriptionSchedules.retrieve(
+                typeof scheduleId === 'string' ? scheduleId : scheduleId.id
+            );
+
             await stripe.subscriptionSchedules.update(schedule.id, {
+                end_behavior: 'release',
                 phases: [
                     {
-                        // Current phase: keep current plan until period end
+                        // Phase 1: Current plan until period end
                         items: [{
                             price: subscription.items.data[0].price.id,
                             quantity: 1
@@ -189,24 +191,30 @@ export async function POST(req: NextRequest) {
                         end_date: periodEnd
                     },
                     {
-                        // Next phase: switch to target plan
+                        // Phase 2: New plan from period end (one cycle, then release)
                         items: [{
                             price: targetPriceId,
                             quantity: 1
                         }],
-                        start_date: periodEnd
+                        start_date: periodEnd,
+                        iterations: 1
                     }
                 ]
             });
 
             console.log('[BILLING] Updated existing subscription schedule');
         } else {
-            // Create new schedule
-            await stripe.subscriptionSchedules.create({
+            // No schedule exists - create new one
+            console.log('[BILLING] No existing schedule, creating new one');
+            
+            // Note: from_subscription is valid in Stripe API but TypeScript types may not recognize it
+            // Using type assertion to bypass TypeScript limitation
+            const newSchedule = await stripe.subscriptionSchedules.create({
                 from_subscription: subscriptionId,
+                end_behavior: 'release',
                 phases: [
                     {
-                        // Current phase: keep current plan until period end
+                        // Phase 1: Current plan until period end
                         items: [{
                             price: subscription.items.data[0].price.id,
                             quantity: 1
@@ -215,17 +223,18 @@ export async function POST(req: NextRequest) {
                         end_date: periodEnd
                     },
                     {
-                        // Next phase: switch to target plan
+                        // Phase 2: New plan from period end (one cycle, then release)
                         items: [{
                             price: targetPriceId,
                             quantity: 1
                         }],
-                        start_date: periodEnd
+                        start_date: periodEnd,
+                        iterations: 1
                     }
                 ]
-            });
+            } as any);
 
-            console.log('[BILLING] Created subscription schedule for downgrade');
+            console.log('[BILLING] Created subscription schedule:', newSchedule.id);
         }
 
         // Save pending info to DB (for UI display only)

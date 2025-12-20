@@ -150,6 +150,12 @@ export async function POST(req: Request) {
 
                 console.log('[WEBHOOK] Invoice billing_reason:', billingReason);
 
+                // Ensure subscriptionId is a string
+                if (!subscriptionId || typeof subscriptionId !== 'string') {
+                    console.warn('[WEBHOOK] Invalid subscription ID in invoice.paid');
+                    break;
+                }
+
                 // Find user by stripe_customer_id
                 const { data: userSub } = await supabaseAdmin
                     .from('user_subscriptions')

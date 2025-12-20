@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 /**
  * Legacy billing page - redirects to /app/billing
  * Kept for backward compatibility with existing links
  */
-export default function DashboardBillingRedirect() {
+function BillingRedirectContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -29,5 +29,17 @@ export default function DashboardBillingRedirect() {
                 <p className="mt-4 text-gray-600">Redirecting to billing...</p>
             </div>
         </div>
+    );
+}
+
+export default function DashboardBillingRedirect() {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+        }>
+            <BillingRedirectContent />
+        </Suspense>
     );
 }
