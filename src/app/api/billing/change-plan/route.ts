@@ -35,15 +35,17 @@ export async function POST(req: NextRequest) {
         const currentPlanId = userSub.plan_id;
         console.log('[BILLING] Current plan:', currentPlanId, '→ Target:', targetPlanId);
 
+        // Same plan - do nothing
+        if (currentPlanId === targetPlanId) {
+            return NextResponse.json({ ok: false, error: 'Already on this plan' });
+        }
+
         // ============================================================
         // CASE A: Target is FREE (Cancellation)
         // ============================================================
         if (targetPlanId === 'free') {
             if (currentPlanId === 'free') {
-                return NextResponse.json({ 
-                    ok: false, 
-                    error: 'Already on free plan' 
-                });
+                return NextResponse.json({ ok: false, error: 'Already on free plan' });
             }
 
             if (!userSub.stripe_subscription_id) {
@@ -70,8 +72,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 ok: true,
                 action: 'cancel_scheduled',
-                effectiveDate: userSub.current_period_end,
-                message: 'Subscription will be canceled at the end of the billing period'
+                effectiveDate: userSub.current_period_end
             });
         }
 
@@ -80,10 +81,32 @@ export async function POST(req: NextRequest) {
         // ============================================================
         if (currentPlanId === 'free') {
             console.log('[BILLING] User on free plan, needs checkout flow');
+            
+            // Create checkout session directly
+            const targetPriceId = STRIPE_PRICES[targetPlanId as keyof typeof STRIPE_PRICES];
+            if (!targetPriceId) {
+                return NextResponse.json({ ok: false, error: 'Price not configured' }, { status: 500 });
+            }
+
+            // Call checkout endpoint internally
+            const checkoutResponse = await fetch(new URL('/api/billing/checkout', req.url).toString(), {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Cookie': req.headers.get('Cookie') || ''
+                },
+                body: JSON.stringify({ planId: targetPlanId })
+            });
+
+            if (!checkoutResponse.ok) {
+                return NextResponse.json({ ok: false, error: 'Failed to create checkout' }, { status: 500 });
+            }
+
+            const { url } = await checkoutResponse.json();
             return NextResponse.json({
                 ok: false,
                 needsCheckout: true,
-                error: 'Please complete checkout to subscribe'
+                checkoutUrl: url
             });
         }
 
@@ -136,113 +159,77 @@ export async function POST(req: NextRequest) {
         const targetIndex = planOrder.indexOf(targetPlanId);
 
         // ============================================================
-        // CASE C: UPGRADE (Target is higher tier)
+        // CASE C: UPGRADE (Target is higher tier) - Charge now, new cycle
         // ============================================================
         if (targetIndex > currentIndex) {
-            console.log('[BILLING] Upgrade detected, applying immediately with proration');
+            console.log('[BILLING] Upgrade detected, applying immediately');
 
-            // Update subscription in Stripe (proration will be created automatically)
+            // Update subscription: new price, charge now, no proration
             await stripe.subscriptions.update(subscriptionId, {
                 items: [{
                     id: currentSubscriptionItemId,
                     price: targetPriceId
                 }],
-                proration_behavior: 'create_prorations'
+                billing_cycle_anchor: 'now',
+                proration_behavior: 'none',
+                cancel_at_period_end: false
             });
 
-            // DO NOT update plan_id in DB here - let webhook handle it
-            console.log('[BILLING] Stripe subscription updated, webhook will sync plan_id');
+            // Update DB immediately (webhook will confirm)
+            await supabase
+                .from('user_subscriptions')
+                .update({ 
+                    plan_id: targetPlanId,
+                    status: 'active'
+                })
+                .eq('user_id', user.id);
+
+            console.log('[BILLING] Upgrade applied, new billing cycle started');
 
             return NextResponse.json({
                 ok: true,
-                action: 'upgraded',
-                message: 'Plan upgraded immediately with prorated billing'
+                action: 'upgraded'
             });
         }
 
         // ============================================================
-        // CASE D: DOWNGRADE (Target is lower tier) - Use Subscription Schedule
+        // CASE D: DOWNGRADE (Target is lower tier) - Cancel current + create new with trial
         // ============================================================
         console.log('[BILLING] Downgrade detected, scheduling for next period');
 
         const periodEnd = subscription.current_period_end;
 
-        // Check if subscription already has a schedule
-        let scheduleId = subscription.schedule;
-        
-        if (scheduleId) {
-            // Schedule exists - retrieve and update it
-            console.log('[BILLING] Found existing schedule:', scheduleId);
-            
-            const schedule = await stripe.subscriptionSchedules.retrieve(
-                typeof scheduleId === 'string' ? scheduleId : scheduleId.id
-            );
+        // Step 1: Cancel current subscription at period end
+        await stripe.subscriptions.update(subscriptionId, {
+            cancel_at_period_end: true
+        });
 
-            await stripe.subscriptionSchedules.update(schedule.id, {
-                end_behavior: 'release',
-                phases: [
-                    {
-                        // Phase 1: Current plan until period end
-                        items: [{
-                            price: subscription.items.data[0].price.id,
-                            quantity: 1
-                        }],
-                        start_date: subscription.current_period_start,
-                        end_date: periodEnd
-                    },
-                    {
-                        // Phase 2: New plan from period end (one cycle, then release)
-                        items: [{
-                            price: targetPriceId,
-                            quantity: 1
-                        }],
-                        start_date: periodEnd,
-                        iterations: 1
-                    }
-                ]
-            });
+        console.log('[BILLING] Current subscription will cancel at period end');
 
-            console.log('[BILLING] Updated existing subscription schedule');
-        } else {
-            // No schedule exists - create new one
-            console.log('[BILLING] No existing schedule, creating new one');
-            
-            // Note: from_subscription is valid in Stripe API but TypeScript types may not recognize it
-            // Using type assertion to bypass TypeScript limitation
-            const newSchedule = await stripe.subscriptionSchedules.create({
-                from_subscription: subscriptionId,
-                end_behavior: 'release',
-                phases: [
-                    {
-                        // Phase 1: Current plan until period end
-                        items: [{
-                            price: subscription.items.data[0].price.id,
-                            quantity: 1
-                        }],
-                        start_date: subscription.current_period_start,
-                        end_date: periodEnd
-                    },
-                    {
-                        // Phase 2: New plan from period end (one cycle, then release)
-                        items: [{
-                            price: targetPriceId,
-                            quantity: 1
-                        }],
-                        start_date: periodEnd,
-                        iterations: 1
-                    }
-                ]
-            } as any);
+        // Step 2: Create new subscription with trial until period end
+        const newSubscription = await stripe.subscriptions.create({
+            customer: userSub.stripe_customer_id,
+            items: [{
+                price: targetPriceId
+            }],
+            trial_end: periodEnd,
+            metadata: {
+                userId: user.id,
+                planId: targetPlanId,
+                isPendingDowngrade: 'true'
+            }
+        });
 
-            console.log('[BILLING] Created subscription schedule:', newSchedule.id);
-        }
+        console.log('[BILLING] New subscription created with trial:', newSubscription.id);
 
-        // Save pending info to DB (for UI display only)
+        // Step 3: Save pending info to DB
         await supabase
             .from('user_subscriptions')
             .update({
+                status: 'active', // Keep active until period end
                 pending_plan_id: targetPlanId,
-                pending_effective_date: new Date(periodEnd * 1000).toISOString()
+                pending_effective_date: new Date(periodEnd * 1000).toISOString(),
+                pending_subscription_id: newSubscription.id
             })
             .eq('user_id', user.id);
 
@@ -250,13 +237,16 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             ok: true,
-                action: 'downgrade_scheduled',
-            effectiveDate: new Date(periodEnd * 1000).toISOString(),
-                message: 'Plan change scheduled for end of billing period'
+            action: 'downgrade_scheduled',
+            effectiveDate: new Date(periodEnd * 1000).toISOString()
         });
 
     } catch (error: any) {
         console.error('[BILLING] Change plan error:', error);
-        return NextResponse.json({ ok: false, error: error.message || 'Internal Error' }, { status: 500 });
+        console.error('[BILLING] Error details:', error.message, error.stack);
+        return NextResponse.json({ 
+            ok: false, 
+            error: error.message || 'Internal Error' 
+        }, { status: 500 });
     }
 }

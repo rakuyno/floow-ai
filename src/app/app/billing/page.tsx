@@ -335,9 +335,15 @@ function BillingContent() {
 
                         {/* Banner de cambio programado */}
                         {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
-                            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                                Cambio programado a <strong>{plans.find(p => p.id === subscription.pending_plan_id)?.name}</strong> el{' '}
-                                <strong>{subscription.pending_effective_date ? new Date(subscription.pending_effective_date).toLocaleDateString() : ''}</strong>.
+                            <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                                Cambio programado para la próxima renovación
+                            </div>
+                        )}
+
+                        {/* Banner discreto de cambio programado */}
+                        {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
+                            <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                                Cambio programado para la próxima renovación
                             </div>
                         )}
 
@@ -346,14 +352,10 @@ function BillingContent() {
                                 const planIndex = planOrder.indexOf(plan.id);
                                 const currentIndex = planOrder.indexOf(currentPlanId);
                                 const isCurrent = plan.id === currentPlanId;
-                                const isUpgrade = planIndex > currentIndex;
-                                const isDowngrade = planIndex < currentIndex;
 
-                                let ctaLabel = 'Seleccionar';
+                                // Simple CTA label
+                                let ctaLabel = 'Cambiar';
                                 if (isCurrent) ctaLabel = 'Plan actual';
-                                else if (plan.id === 'free') ctaLabel = 'Cancelar (fin de periodo)';
-                                else if (isUpgrade) ctaLabel = `Cambiar a ${plan.name} (inmediato + prorrateo)`;
-                                else if (isDowngrade) ctaLabel = `Cambiar a ${plan.name} (próxima renovación)`;
 
                                 return (
                                     <div key={plan.id} className="border rounded-xl p-4 flex flex-col">
