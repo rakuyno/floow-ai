@@ -45,7 +45,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                 <div className="flex h-16 justify-between">
                     <div className="flex">
                         <div className="flex flex-shrink-0 items-center">
-                            <Logo className="h-8 w-auto" imgClassName="h-8" />
+                            <Logo href="/app/dashboard" className="h-8 w-auto" imgClassName="h-8" />
                         </div>
                         <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                             {navigation.map((item) => (

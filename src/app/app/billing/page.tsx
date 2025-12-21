@@ -114,7 +114,7 @@ function BillingContent() {
         }
     }, [searchParams, fetchData, router]);
 
-    // ✅ Handle change plan with /api/billing/change-plan
+    // Handle change plan - always redirect to checkout
     async function handleChangePlan(targetPlanId: string) {
         setProcessing(true);
 
@@ -137,56 +137,26 @@ function BillingContent() {
             }
 
             if (!response.ok) {
-                throw new Error(result?.error || 'Error al cambiar plan. Revisa logs.');
+                throw new Error(result?.error || 'Error al cambiar plan.');
             }
 
-            if (result.needsCheckout) {
-                // Si el backend ya trae checkoutUrl, úsalo; si no, llama a checkout
-                if (result.checkoutUrl) {
-                    window.location.href = result.checkoutUrl;
-                    return;
-                }
-
-                const checkoutResponse = await fetch('/api/billing/checkout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ planId: targetPlanId })
-                });
-
-                const checkoutContentType = checkoutResponse.headers.get('content-type');
-                if (!checkoutContentType || !checkoutContentType.includes('application/json')) {
-                    const text = await checkoutResponse.text();
-                    console.error('[Billing] Non-JSON response from checkout:', text);
-                    throw new Error('Error al iniciar checkout. Revisa logs.');
-                }
-
-                const { url } = await checkoutResponse.json();
-                if (!url) throw new Error('Checkout URL missing');
-                window.location.href = url;
+            // If cancel to free
+            if (result.action === 'canceled') {
+                niceAlert('Suscripción cancelada');
+                await fetchData();
+                setShowPlanModal(false);
                 return;
             }
 
-            if (!result.ok) {
-                throw new Error(result.error || 'Error al cambiar plan. Revisa logs.');
+            // Always redirect to checkout for paid plans
+            if (result.needsCheckout && result.checkoutUrl) {
+                window.location.href = result.checkoutUrl;
+                return;
             }
-
-            // Mensajes según acción
-            if (result.action === 'upgraded') {
-                niceAlert('✅ Plan actualizado inmediatamente');
-            } else if (result.action === 'downgrade_scheduled') {
-                const date = result.effectiveDate ? new Date(result.effectiveDate).toLocaleDateString() : '';
-                niceAlert(`📅 Cambio programado para el ${date}`);
-            } else if (result.action === 'cancel_scheduled') {
-                const date = result.effectiveDate ? new Date(result.effectiveDate).toLocaleDateString() : '';
-                niceAlert(`🗓️ Se cancelará el ${date}`);
-            }
-
-            await fetchData();
-            setShowPlanModal(false);
 
         } catch (error: any) {
             console.error('[Billing] Error changing plan:', error);
-            niceAlert(error.message || 'Error al cambiar plan. Revisa logs.');
+            niceAlert(error.message || 'Error al cambiar plan.');
         } finally {
             setProcessing(false);
         }
@@ -222,9 +192,6 @@ function BillingContent() {
     const planOrder = ['free', 'starter', 'growth', 'agency'];
     const currentPlanIndex = planOrder.indexOf(currentPlanId);
 
-    // Check if subscription is canceling
-    const isCanceling = subscription?.status === 'canceling' || subscription?.pending_plan_id === 'free';
-
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-8">
             <h1 className="text-3xl font-bold text-gray-900">Billing & Plans</h1>
@@ -241,35 +208,6 @@ function BillingContent() {
                 </div>
             )}
 
-            {/* Pending Change Alert */}
-            {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800">
-                        📅 Cambio programado a{' '}
-                        <strong className="font-semibold">
-                            {plans.find(p => p.id === subscription.pending_plan_id)?.name}
-                        </strong>
-                        {' '}para el{' '}
-                        <strong className="font-semibold">
-                            {new Date(subscription.pending_effective_date!).toLocaleDateString()}
-                        </strong>
-                    </p>
-                </div>
-            )}
-
-            {/* Canceling Alert */}
-            {isCanceling && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <p className="text-sm text-yellow-800">
-                        🗓️ Tu suscripción se cancelará el{' '}
-                        <strong className="font-semibold">
-                            {new Date(subscription!.current_period_end).toLocaleDateString()}
-                        </strong>
-                        . Seguirás teniendo acceso hasta entonces.
-                    </p>
-                </div>
-            )}
-
             {/* Current Status */}
             <div className="bg-white rounded-xl shadow p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
@@ -280,11 +218,9 @@ function BillingContent() {
                     <p className="text-sm text-gray-500 mt-1">
                         Estado:{' '}
                         <span className={`capitalize font-medium ${
-                            subscription?.status === 'active' ? 'text-green-600' : 
-                            isCanceling ? 'text-yellow-600' :
-                            'text-gray-500'
+                            subscription?.status === 'active' ? 'text-green-600' : 'text-gray-500'
                         }`}>
-                            {isCanceling ? 'Cancelando' : subscription?.status || 'Inactivo'}
+                            {subscription?.status || 'Inactivo'}
                         </span>
                     </p>
                 </div>
@@ -334,13 +270,6 @@ function BillingContent() {
                         </div>
 
                         {/* Banner de cambio programado */}
-                        {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
-                            <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
-                                Cambio programado para la próxima renovación
-                            </div>
-                        )}
-
-                        {/* Banner discreto de cambio programado */}
                         {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
                             <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
                                 Cambio programado para la próxima renovación

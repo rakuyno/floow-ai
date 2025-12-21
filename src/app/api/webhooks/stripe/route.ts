@@ -90,10 +90,27 @@ export async function POST(req: Request) {
 
                 if (!userId || !planId) break;
 
+                // Get current subscription (if any)
+                const { data: currentSub } = await supabaseAdmin
+                    .from('user_subscriptions')
+                    .select('stripe_subscription_id')
+                    .eq('user_id', userId)
+                    .single();
+
+                // If user had a previous subscription, cancel it
+                if (currentSub?.stripe_subscription_id && currentSub.stripe_subscription_id !== subscriptionId) {
+                    console.log('[WEBHOOK] Canceling previous subscription:', currentSub.stripe_subscription_id);
+                    try {
+                        await stripe.subscriptions.cancel(currentSub.stripe_subscription_id);
+                    } catch (err) {
+                        console.warn('[WEBHOOK] Failed to cancel old subscription:', err);
+                    }
+                }
+
                 // Retrieve subscription details to get dates
                 const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-                // Update User Subscription
+                // Update User Subscription with new plan
                 await supabaseAdmin
                     .from('user_subscriptions')
                     .update({
@@ -103,10 +120,14 @@ export async function POST(req: Request) {
                         status: 'active',
                         current_period_start: new Date(subscription.current_period_start * 1000),
                         current_period_end: new Date(subscription.current_period_end * 1000),
+                        pending_plan_id: null,
+                        pending_effective_date: null,
+                        pending_subscription_id: null
                     })
                     .eq('user_id', userId);
 
-                // ✅ FIX #3: Dedupe tokens with simple query (no JSONB filter)
+                console.log('[WEBHOOK] Subscription updated to:', planId);
+
                 // Check if user already received initial tokens for ANY subscription
                 const { data: existingInitial } = await supabaseAdmin
                     .from('user_token_ledger')
@@ -135,7 +156,7 @@ export async function POST(req: Request) {
                         console.log('[WEBHOOK] Initial tokens assigned:', planData.monthly_tokens);
                     }
                 } else {
-                    console.log('[WEBHOOK] Skipping initial tokens (already assigned previously)');
+                    console.log('[WEBHOOK] User already has tokens, skipping initial grant');
                 }
 
                 break;
@@ -156,27 +177,10 @@ export async function POST(req: Request) {
                     break;
                 }
 
-                // Get priceId from invoice line items
-                const priceId = invoice.lines?.data?.[0]?.price?.id;
-                console.log('[WEBHOOK] Invoice price:', priceId);
-
-                // Map priceId to planId
-                let planIdFromInvoice: string | null = null;
-                if (priceId) {
-                    for (const [planKey, planPriceId] of Object.entries(STRIPE_PRICES)) {
-                        if (planPriceId === priceId) {
-                            planIdFromInvoice = planKey;
-                            break;
-                        }
-                    }
-                }
-
-                console.log('[WEBHOOK] Mapped plan from invoice:', planIdFromInvoice);
-
                 // Find user by stripe_customer_id
                 const { data: userSub } = await supabaseAdmin
                     .from('user_subscriptions')
-                    .select('user_id, plan_id, stripe_subscription_id, pending_subscription_id')
+                    .select('user_id, plan_id')
                     .eq('stripe_customer_id', customerId)
                     .single();
 
@@ -200,27 +204,14 @@ export async function POST(req: Request) {
 
                 console.log('[WEBHOOK] Subscription dates updated for user:', userSub.user_id);
 
-                // ✅ ADD TOKENS based on billing reason
-                let shouldAddTokens = false;
-                let tokenReason = '';
-
+                // Only refresh tokens on monthly renewal
                 if (billingReason === 'subscription_cycle') {
-                    // Monthly renewal
-                    shouldAddTokens = true;
-                    tokenReason = 'monthly_refresh';
-                    console.log('[WEBHOOK] Monthly renewal - will refresh tokens');
-                } else if (billingReason === 'subscription_update' || billingReason === 'subscription_create') {
-                    // Plan change (upgrade) or new subscription with immediate payment
-                    shouldAddTokens = true;
-                    tokenReason = 'plan_change';
-                    console.log('[WEBHOOK] Plan change/create - will add tokens');
-                }
+                    console.log('[WEBHOOK] Monthly renewal - refreshing tokens');
 
-                if (shouldAddTokens && planIdFromInvoice) {
                     const { data: planData } = await supabaseAdmin
                         .from('subscription_plans')
                         .select('monthly_tokens')
-                        .eq('id', planIdFromInvoice)
+                        .eq('id', userSub.plan_id)
                         .single();
 
                     if (planData) {
@@ -228,13 +219,13 @@ export async function POST(req: Request) {
                             supabaseAdmin,
                             userSub.user_id,
                             planData.monthly_tokens,
-                            tokenReason,
-                            { planId: planIdFromInvoice, subscriptionId, billingReason }
+                            'monthly_refresh',
+                            { planId: userSub.plan_id, subscriptionId }
                         );
-                        console.log('[WEBHOOK] Tokens added:', planData.monthly_tokens, 'reason:', tokenReason);
+                        console.log('[WEBHOOK] Tokens refreshed:', planData.monthly_tokens);
                     }
                 } else {
-                    console.log('[WEBHOOK] Skipping tokens (billing_reason:', billingReason + ')');
+                    console.log('[WEBHOOK] Not a renewal, skipping token refresh');
                 }
 
                 break;
@@ -277,123 +268,47 @@ export async function POST(req: Request) {
                 console.log('[WEBHOOK] Processing', event.type);
                 const subscription = event.data.object as any;
                 const customerId = subscription.customer;
-                const subscriptionId = subscription.id;
 
                 // Find user by stripe_customer_id
                 const { data: userSub } = await supabaseAdmin
                     .from('user_subscriptions')
-                    .select('user_id, pending_plan_id, pending_subscription_id, stripe_subscription_id')
+                    .select('user_id')
                     .eq('stripe_customer_id', customerId)
                     .single();
 
-                if (userSub) {
-                    if (event.type === 'customer.subscription.deleted') {
-                        console.log('[WEBHOOK] Subscription deleted:', subscriptionId);
+                if (!userSub) {
+                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    break;
+                }
 
-                        // Check if this is the old subscription being canceled as part of downgrade
-                        const isDeletingOldSubForDowngrade = 
-                            userSub.pending_subscription_id && 
-                            userSub.stripe_subscription_id === subscriptionId;
+                if (event.type === 'customer.subscription.deleted') {
+                    // Subscription canceled → reset to free
+                    await supabaseAdmin
+                        .from('user_subscriptions')
+                        .update({
+                            plan_id: 'free',
+                            status: 'active',
+                            stripe_subscription_id: null,
+                            pending_plan_id: null,
+                            pending_effective_date: null,
+                            pending_subscription_id: null
+                        })
+                        .eq('user_id', userSub.user_id);
 
-                        if (isDeletingOldSubForDowngrade) {
-                            console.log('[WEBHOOK] Old subscription deleted, activating pending downgrade');
-                            
-                            // Switch to pending subscription
-                            await supabaseAdmin
-                                .from('user_subscriptions')
-                                .update({
-                                    stripe_subscription_id: userSub.pending_subscription_id,
-                                    plan_id: userSub.pending_plan_id,
-                                    status: 'active',
-                                    pending_plan_id: null,
-                                    pending_effective_date: null,
-                                    pending_subscription_id: null
-                                })
-                                .eq('user_id', userSub.user_id);
-
-                            console.log('[WEBHOOK] Downgrade activated for user:', userSub.user_id);
-                        } else {
-                            // Check if there's another active subscription for this customer (don't reset to free yet)
-                            const otherSubs = await stripe.subscriptions.list({
-                                customer: customerId,
-                                status: 'all',
-                                limit: 5
-                            });
-
-                            const hasOtherActiveSub = otherSubs.data.some(
-                                sub => sub.id !== subscriptionId && (sub.status === 'active' || sub.status === 'trialing')
-                            );
-
-                            if (hasOtherActiveSub) {
-                                console.log('[WEBHOOK] Other active subscription exists, not resetting to free');
-                            } else {
-                                // No other subs → reset to free
-                                await supabaseAdmin
-                                    .from('user_subscriptions')
-                                    .update({
-                                        plan_id: 'free',
-                                        status: 'active',
-                                        stripe_subscription_id: null,
-                                        pending_plan_id: null,
-                                        pending_effective_date: null,
-                                        pending_subscription_id: null,
-                                        current_period_end: new Date(subscription.current_period_end * 1000)
-                                    })
-                                    .eq('user_id', userSub.user_id);
-
-                                console.log('[WEBHOOK] No other subs, user reset to free:', userSub.user_id);
-                            }
-                        }
-                    } else {
-                        // customer.subscription.updated
-                        // Sync plan_id from Stripe (source of truth)
-                        const priceId = subscription.items?.data?.[0]?.price?.id;
-                        let syncedPlanId = null;
-
-                        if (priceId) {
-                            for (const [planKey, planPriceId] of Object.entries(STRIPE_PRICES)) {
-                                if (planPriceId === priceId) {
-                                    syncedPlanId = planKey;
-                                    console.log('[WEBHOOK] Synced plan_id from Stripe price:', priceId, '→', planKey);
-                                    break;
-                                }
-                            }
-                        }
-
-                        const updateData: any = {
+                    console.log('[WEBHOOK] Subscription deleted, user reset to free:', userSub.user_id);
+                } else {
+                    // customer.subscription.updated - just update status and dates
+                    await supabaseAdmin
+                        .from('user_subscriptions')
+                        .update({
                             status: subscription.status,
                             current_period_end: new Date(subscription.current_period_end * 1000)
-                        };
+                        })
+                        .eq('user_id', userSub.user_id);
 
-                        // Only update plan_id if we successfully mapped it from Stripe
-                        if (syncedPlanId) {
-                            updateData.plan_id = syncedPlanId;
-                            
-                            // Clear pending if it was applied
-                            if (userSub.pending_plan_id === syncedPlanId) {
-                                updateData.pending_plan_id = null;
-                                updateData.pending_effective_date = null;
-                                updateData.pending_subscription_id = null;
-                                console.log('[WEBHOOK] Pending plan applied, clearing pending fields');
-                            }
-                        }
-
-                        // Update stripe_subscription_id if this matches pending
-                        if (userSub.pending_subscription_id === subscriptionId) {
-                            updateData.stripe_subscription_id = subscriptionId;
-                            console.log('[WEBHOOK] Updated to pending subscription ID');
-                        }
-
-                        await supabaseAdmin
-                            .from('user_subscriptions')
-                            .update(updateData)
-                            .eq('user_id', userSub.user_id);
-
-                        console.log('[WEBHOOK] Subscription updated for user:', userSub.user_id, 'status:', subscription.status, 'plan:', syncedPlanId);
-                    }
-                } else {
-                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    console.log('[WEBHOOK] Subscription updated, status:', subscription.status);
                 }
+                
                 break;
             }
 
