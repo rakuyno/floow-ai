@@ -2,7 +2,6 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { stripe, getPlanFromPriceId, PLANS, STRIPE_PRICES } from '@/lib/stripe';
 import { createClient } from '@supabase/supabase-js';
-import { adjustUserTokens } from '@/lib/tokens';
 
 // Initialize Supabase Admin Client (Service Role)
 const supabaseAdmin = createClient(
@@ -12,19 +11,22 @@ const supabaseAdmin = createClient(
 
 /**
  * Check if a webhook event has already been processed (idempotency)
+ * Only skip if status is 'processed', not 'failed'
  */
 async function isEventProcessed(eventId: string): Promise<boolean> {
     const { data, error } = await supabaseAdmin
         .from('stripe_webhook_events')
-        .select('id')
+        .select('id, status')
         .eq('id', eventId)
         .single();
 
     if (error && error.code !== 'PGRST116') {
         console.error('[WEBHOOK] Error checking event:', error);
+        return false;
     }
 
-    return !!data;
+    // Only skip if processed, allow retry if failed
+    return data?.status === 'processed';
 }
 
 /**
@@ -39,51 +41,59 @@ async function markEventProcessed(
 ): Promise<void> {
     const { error } = await supabaseAdmin
         .from('stripe_webhook_events')
-        .insert({
+        .upsert({
             id: eventId,
             type: eventType,
             data: eventData || null,
             status,
-            error: errorMessage || null
+            error: errorMessage || null,
+            processed_at: new Date().toISOString()
+        }, {
+            onConflict: 'id'
         });
 
     if (error) {
-        console.error('[WEBHOOK] Error marking event as processed:', error);
+        console.error('[WEBHOOK] Error marking event:', error);
     }
 }
 
 /**
- * Reset user tokens to exact plan amount
+ * Normalize Stripe object to ID string
  */
-async function resetUserTokens(
-    userId: string,
-    targetTokens: number,
-    reason: string,
-    metadata?: any
-): Promise<void> {
-    console.log('[WEBHOOK] Resetting tokens to exact amount:', {
-        userId,
-        targetTokens,
-        reason
-    });
+function normalizeId(obj: any): string | null {
+    if (!obj) return null;
+    if (typeof obj === 'string') return obj;
+    if (typeof obj === 'object' && obj.id) return obj.id;
+    return null;
+}
 
-    try {
-        const { data, error } = await supabaseAdmin
-            .rpc('set_user_tokens', {
-                p_user_id: userId,
-                p_target_amount: targetTokens,
-                p_reason: reason,
-                p_metadata: metadata || {}
-            });
+/**
+ * Find user subscription robustly
+ */
+async function findUserSubscription(customerId: string | null, subscriptionId?: string | null) {
+    if (!customerId) return null;
+    
+    // First try by customer_id
+    let result = await supabaseAdmin
+        .from('user_subscriptions')
+        .select('*')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle();
 
-        if (error) {
-            console.error('[WEBHOOK] Error setting tokens:', error);
-        } else {
-            console.log('[WEBHOOK] ✅ Tokens set to:', data);
-        }
-    } catch (err) {
-        console.error('[WEBHOOK] Exception setting tokens:', err);
+    if (result.data) {
+        return result.data;
     }
+
+    // Fallback: try by subscription_id
+    if (subscriptionId) {
+        result = await supabaseAdmin
+            .from('user_subscriptions')
+            .select('*')
+            .eq('stripe_subscription_id', subscriptionId)
+            .maybeSingle();
+    }
+
+    return result.data;
 }
 
 export async function POST(req: Request) {
@@ -103,14 +113,16 @@ export async function POST(req: Request) {
         return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
     }
 
-    // Idempotency check
+    // Idempotency check (only skip if processed, not if failed)
     const alreadyProcessed = await isEventProcessed(event.id);
     if (alreadyProcessed) {
-        console.log(`[WEBHOOK] Event ${event.id} already processed, skipping.`);
+        console.log(`[WEBHOOK] Event ${event.id} already processed successfully, skipping.`);
         return new NextResponse(null, { status: 200 });
     }
 
-    console.log(`[WEBHOOK] Processing event ${event.id} of type ${event.type}`);
+    console.log(`[WEBHOOK] ========================================`);
+    console.log(`[WEBHOOK] Processing event ${event.id}`);
+    console.log(`[WEBHOOK] Type: ${event.type}`);
 
     const session = event.data.object as any;
 
@@ -118,39 +130,45 @@ export async function POST(req: Request) {
         switch (event.type) {
             case 'checkout.session.completed': {
                 console.log('[WEBHOOK] checkout.session.completed');
-                const subscriptionId = session.subscription;
+                
+                const subscriptionId = normalizeId(session.subscription);
+                const customerId = normalizeId(session.customer);
                 const userId = session.metadata?.userId;
                 const planId = session.metadata?.planId;
-                const customerId = session.customer;
+
+                console.log('[WEBHOOK] Data:', { subscriptionId, customerId, userId, planId });
 
                 if (!userId || !planId) {
-                    console.warn('[WEBHOOK] Missing userId or planId in metadata:', session.metadata);
+                    console.warn('[WEBHOOK] ⚠️ Missing userId or planId in metadata:', session.metadata);
                     break;
                 }
 
-                console.log('[WEBHOOK] Checkout data:', { subscriptionId, userId, planId, customerId });
+                if (!subscriptionId || !customerId) {
+                    console.error('[WEBHOOK] ❌ Missing subscription or customer ID');
+                    throw new Error('Missing subscription or customer ID');
+                }
 
                 // Get current subscription from DB
                 const { data: currentSub } = await supabaseAdmin
                     .from('user_subscriptions')
                     .select('stripe_subscription_id')
                     .eq('user_id', userId)
-                    .single();
+                    .maybeSingle();
 
                 // Cancel old subscription if exists and is different
                 if (currentSub?.stripe_subscription_id && currentSub.stripe_subscription_id !== subscriptionId) {
-                    console.log('[WEBHOOK] Canceling old subscription:', currentSub.stripe_subscription_id);
+                    console.log('[WEBHOOK] 🔄 Canceling old subscription:', currentSub.stripe_subscription_id);
                     try {
                         await stripe.subscriptions.cancel(currentSub.stripe_subscription_id);
                     } catch (err) {
-                        console.warn('[WEBHOOK] Failed to cancel old subscription:', err);
+                        console.warn('[WEBHOOK] ⚠️ Failed to cancel old subscription:', err);
                     }
                 }
 
                 // Retrieve subscription details
                 const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-                // UPSERT user subscription (create or update)
+                // UPSERT user subscription
                 const { error: upsertError } = await supabaseAdmin
                     .from('user_subscriptions')
                     .upsert({
@@ -169,61 +187,62 @@ export async function POST(req: Request) {
                     });
 
                 if (upsertError) {
-                    console.error('[WEBHOOK] Upsert error:', upsertError);
-                } else {
-                    console.log('[WEBHOOK] ✅ Subscription upserted for user:', userId, 'plan:', planId);
+                    console.error('[WEBHOOK] ❌ Upsert error:', upsertError);
+                    throw upsertError;
                 }
 
-                // RESET tokens to plan amount
-                const { data: planData } = await supabaseAdmin
-                    .from('subscription_plans')
-                    .select('monthly_tokens')
-                    .eq('id', planId)
-                    .single();
+                console.log('[WEBHOOK] ✅ Subscription upserted:', { userId, planId, subscriptionId });
 
-                if (planData) {
-                    await resetUserTokens(
-                        userId,
-                        planData.monthly_tokens,
-                        'subscription_reset',
-                        { planId, subscriptionId }
-                    );
-                } else {
-                    console.warn('[WEBHOOK] Plan not found:', planId);
+                // ACCUMULATE TOKENS (not reset)
+                console.log('[WEBHOOK] 💰 Granting plan tokens (accumulate)');
+                const { data: tokensResult, error: tokensError } = await supabaseAdmin
+                    .rpc('grant_plan_tokens', {
+                        p_user_id: userId,
+                        p_plan_id: planId,
+                        p_reason: 'plan_change_grant',
+                        p_metadata: {
+                            subscriptionId,
+                            from: 'checkout.session.completed'
+                        }
+                    });
+
+                if (tokensError) {
+                    console.error('[WEBHOOK] ❌ grant_plan_tokens error:', tokensError);
+                    throw tokensError;
                 }
+
+                console.log('[WEBHOOK] ✅ Tokens granted, new balance:', tokensResult);
 
                 break;
             }
 
             case 'invoice.paid': {
                 console.log('[WEBHOOK] invoice.paid');
+                
                 const invoice = event.data.object;
-                const subscriptionId = invoice.subscription;
-                const customerId = invoice.customer;
+                const subscriptionId = normalizeId(invoice.subscription);
+                const customerId = normalizeId(invoice.customer);
                 const billingReason = invoice.billing_reason;
 
-                console.log('[WEBHOOK] Invoice:', { subscriptionId, customerId, billingReason });
+                console.log('[WEBHOOK] Data:', { subscriptionId, customerId, billingReason });
 
-                if (!subscriptionId || typeof subscriptionId !== 'string') {
-                    console.warn('[WEBHOOK] Invalid subscription ID');
+                if (!subscriptionId || !customerId) {
+                    console.warn('[WEBHOOK] ⚠️ Invalid subscription or customer ID');
                     break;
                 }
 
-                // Find user
-                const { data: userSub } = await supabaseAdmin
-                    .from('user_subscriptions')
-                    .select('user_id, plan_id, stripe_subscription_id')
-                    .eq('stripe_customer_id', customerId)
-                    .single();
+                // Find user robustly
+                const userSub = await findUserSubscription(customerId, subscriptionId);
 
                 if (!userSub) {
-                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    console.warn('[WEBHOOK] ⚠️ No user subscription found for customer:', customerId);
                     break;
                 }
 
                 // RACE CONDITION FIX: Only process if this is the active subscription
                 if (userSub.stripe_subscription_id !== subscriptionId) {
-                    console.log('[WEBHOOK] Ignoring invoice.paid for non-active subscription:', subscriptionId, 'current:', userSub.stripe_subscription_id);
+                    console.log('[WEBHOOK] ⚠️ Ignoring invoice.paid for non-active subscription');
+                    console.log('[WEBHOOK] Event sub:', subscriptionId, 'DB sub:', userSub.stripe_subscription_id);
                     break;
                 }
 
@@ -240,11 +259,11 @@ export async function POST(req: Request) {
                     })
                     .eq('user_id', userSub.user_id);
 
-                console.log('[WEBHOOK] Dates updated for user:', userSub.user_id);
+                console.log('[WEBHOOK] ✅ Dates updated');
 
-                // RESET tokens on monthly renewal
+                // RESET tokens on monthly renewal ONLY
                 if (billingReason === 'subscription_cycle') {
-                    console.log('[WEBHOOK] Monthly renewal detected - resetting tokens');
+                    console.log('[WEBHOOK] 🔄 Monthly renewal - RESETTING tokens to plan amount');
 
                     const { data: planData } = await supabaseAdmin
                         .from('subscription_plans')
@@ -252,16 +271,29 @@ export async function POST(req: Request) {
                         .eq('id', userSub.plan_id)
                         .single();
 
-                    if (planData) {
-                        await resetUserTokens(
-                            userSub.user_id,
-                            planData.monthly_tokens,
-                            'monthly_refresh_reset',
-                            { planId: userSub.plan_id, subscriptionId }
-                        );
+                    if (!planData) {
+                        console.error('[WEBHOOK] ❌ Plan not found:', userSub.plan_id);
+                        throw new Error(`Plan not found: ${userSub.plan_id}`);
                     }
+
+                    console.log('[WEBHOOK] Resetting to:', planData.monthly_tokens, 'tokens');
+
+                    const { data: tokensResult, error: tokensError } = await supabaseAdmin
+                        .rpc('set_user_tokens', {
+                            p_user_id: userSub.user_id,
+                            p_target_amount: planData.monthly_tokens,
+                            p_reason: 'monthly_reset',
+                            p_metadata: { subscriptionId, planId: userSub.plan_id }
+                        });
+
+                    if (tokensError) {
+                        console.error('[WEBHOOK] ❌ set_user_tokens error:', tokensError);
+                        throw tokensError;
+                    }
+
+                    console.log('[WEBHOOK] ✅ Tokens reset to:', tokensResult);
                 } else {
-                    console.log('[WEBHOOK] Not a renewal (billing_reason:', billingReason + '), skipping tokens');
+                    console.log('[WEBHOOK] Not a renewal (billing_reason:', billingReason + '), tokens unchanged');
                 }
 
                 break;
@@ -269,17 +301,14 @@ export async function POST(req: Request) {
 
             case 'invoice.payment_failed': {
                 console.log('[WEBHOOK] invoice.payment_failed');
+                
                 const invoice = event.data.object;
-                const customerId = invoice.customer;
+                const customerId = normalizeId(invoice.customer);
 
-                const { data: userSub } = await supabaseAdmin
-                    .from('user_subscriptions')
-                    .select('user_id')
-                    .eq('stripe_customer_id', customerId)
-                    .single();
+                const userSub = await findUserSubscription(customerId);
 
                 if (!userSub) {
-                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    console.warn('[WEBHOOK] ⚠️ No user subscription found');
                     break;
                 }
 
@@ -288,30 +317,33 @@ export async function POST(req: Request) {
                     .update({ status: 'past_due' })
                     .eq('user_id', userSub.user_id);
 
-                console.log('[WEBHOOK] Subscription marked as past_due for user:', userSub.user_id);
+                console.log('[WEBHOOK] ✅ Status set to past_due');
                 break;
             }
 
             case 'customer.subscription.updated': {
                 console.log('[WEBHOOK] customer.subscription.updated');
+                
                 const subscription = event.data.object as any;
-                const customerId = subscription.customer;
-                const subscriptionId = subscription.id;
+                const subscriptionId = normalizeId(subscription.id);
+                const customerId = normalizeId(subscription.customer);
 
-                const { data: userSub } = await supabaseAdmin
-                    .from('user_subscriptions')
-                    .select('user_id, stripe_subscription_id')
-                    .eq('stripe_customer_id', customerId)
-                    .single();
+                if (!subscriptionId || !customerId) {
+                    console.warn('[WEBHOOK] ⚠️ Invalid IDs');
+                    break;
+                }
+
+                const userSub = await findUserSubscription(customerId, subscriptionId);
 
                 if (!userSub) {
-                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    console.warn('[WEBHOOK] ⚠️ No user subscription found');
                     break;
                 }
 
                 // RACE CONDITION FIX: Only process if this is the active subscription
                 if (userSub.stripe_subscription_id !== subscriptionId) {
-                    console.log('[WEBHOOK] Ignoring subscription.updated for non-active subscription:', subscriptionId, 'current:', userSub.stripe_subscription_id);
+                    console.log('[WEBHOOK] ⚠️ Ignoring subscription.updated for non-active subscription');
+                    console.log('[WEBHOOK] Event sub:', subscriptionId, 'DB sub:', userSub.stripe_subscription_id);
                     break;
                 }
 
@@ -323,37 +355,40 @@ export async function POST(req: Request) {
                     })
                     .eq('user_id', userSub.user_id);
 
-                console.log('[WEBHOOK] ✅ Subscription updated for user:', userSub.user_id, 'status:', subscription.status);
+                console.log('[WEBHOOK] ✅ Status/dates updated:', subscription.status);
                 break;
             }
 
             case 'customer.subscription.deleted': {
                 console.log('[WEBHOOK] customer.subscription.deleted');
+                
                 const subscription = event.data.object as any;
-                const customerId = subscription.customer;
-                const deletedSubId = subscription.id;
+                const deletedSubId = normalizeId(subscription.id);
+                const customerId = normalizeId(subscription.customer);
 
-                console.log('[WEBHOOK] Deleted subscription:', deletedSubId);
+                console.log('[WEBHOOK] Deleted sub:', deletedSubId);
 
-                const { data: userSub } = await supabaseAdmin
-                    .from('user_subscriptions')
-                    .select('user_id, stripe_subscription_id')
-                    .eq('stripe_customer_id', customerId)
-                    .single();
+                if (!deletedSubId || !customerId) {
+                    console.warn('[WEBHOOK] ⚠️ Invalid IDs');
+                    break;
+                }
+
+                const userSub = await findUserSubscription(customerId, deletedSubId);
 
                 if (!userSub) {
-                    console.warn('[WEBHOOK] No user subscription found for customer:', customerId);
+                    console.warn('[WEBHOOK] ⚠️ No user subscription found');
                     break;
                 }
 
                 // RACE CONDITION FIX: Only reset to free if this is the ACTIVE subscription
                 if (userSub.stripe_subscription_id && userSub.stripe_subscription_id !== deletedSubId) {
-                    console.log('[WEBHOOK] ⚠️ Ignoring deletion of old subscription:', deletedSubId, 'current active:', userSub.stripe_subscription_id);
+                    console.log('[WEBHOOK] ⚠️ Ignoring deletion of old subscription');
+                    console.log('[WEBHOOK] Deleted:', deletedSubId, 'Active:', userSub.stripe_subscription_id);
                     break;
                 }
 
-                // This is the active subscription being deleted → reset to free
-                console.log('[WEBHOOK] Active subscription deleted, resetting to free');
+                // This is the active subscription → reset to free
+                console.log('[WEBHOOK] 🔄 Active subscription deleted, resetting to free');
 
                 await supabaseAdmin
                     .from('user_subscriptions')
@@ -367,7 +402,7 @@ export async function POST(req: Request) {
                     })
                     .eq('user_id', userSub.user_id);
 
-                console.log('[WEBHOOK] ✅ User reset to free:', userSub.user_id);
+                console.log('[WEBHOOK] ✅ User reset to free (tokens unchanged)');
                 break;
             }
 
@@ -380,9 +415,10 @@ export async function POST(req: Request) {
         console.log(`[WEBHOOK] ✅ Event ${event.id} marked as processed`);
 
     } catch (error: any) {
-        console.error('[WEBHOOK] ❌ ERROR:', error);
-        console.error('[WEBHOOK] Error stack:', error.stack);
+        console.error('[WEBHOOK] ❌ ERROR:', error.message);
+        console.error('[WEBHOOK] Stack:', error.stack);
         
+        // Mark as failed for retry
         await markEventProcessed(
             event.id, 
             event.type, 
@@ -391,6 +427,7 @@ export async function POST(req: Request) {
             error.message || 'Unknown error'
         );
 
+        // Return 500 so Stripe retries
         return new NextResponse('Internal Error', { status: 500 });
     }
 
