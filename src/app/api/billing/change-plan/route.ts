@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { STRIPE_PRICES } from '@/lib/stripe';
+import { stripe, STRIPE_PRICES } from '@/lib/stripe';
 
 /**
  * Simple plan change: Always redirect to Stripe Checkout
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         // Get current subscription
         const { data: userSub } = await supabase
             .from('user_subscriptions')
-            .select('plan_id, stripe_subscription_id')
+            .select('plan_id, stripe_subscription_id, stripe_customer_id')
             .eq('user_id', user.id)
             .single();
 
@@ -42,19 +42,30 @@ export async function POST(req: NextRequest) {
             if (!userSub?.stripe_subscription_id) {
                 return NextResponse.json({ ok: false, error: 'No active subscription to cancel' });
             }
-
-            const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
             
-            // Cancel immediately
+            // Cancel immediately in Stripe
             await stripe.subscriptions.cancel(userSub.stripe_subscription_id);
 
-            console.log('[BILLING] Subscription canceled immediately');
+            // Update DB immediately (don't wait for webhook)
+            await supabase
+                .from('user_subscriptions')
+                .update({
+                    plan_id: 'free',
+                    status: 'active',
+                    stripe_subscription_id: null,
+                    pending_plan_id: null,
+                    pending_effective_date: null,
+                    pending_subscription_id: null
+                })
+                .eq('user_id', user.id);
+
+            console.log('[BILLING] Subscription canceled and DB updated to free');
 
             return NextResponse.json({ ok: true, action: 'canceled' });
         }
 
         // ============================================================
-        // CASE 2: Any paid plan → Redirect to Checkout
+        // CASE 2: Any paid plan → Create Checkout Session
         // ============================================================
         
         const targetPriceId = STRIPE_PRICES[targetPlanId as keyof typeof STRIPE_PRICES];
@@ -62,30 +73,44 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ok: false, error: 'Price not configured' }, { status: 500 });
         }
 
-        // Call checkout endpoint to get URL
-        const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const checkoutUrl = new URL('/api/billing/checkout', appUrl);
+        // Determine app URL
+        const forwardedHost = req.headers.get('x-forwarded-host');
+        const forwardedProto = req.headers.get('x-forwarded-proto');
         
-        const checkoutResponse = await fetch(checkoutUrl.toString(), {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Cookie': req.headers.get('Cookie') || ''
-            },
-            body: JSON.stringify({ planId: targetPlanId })
-        });
-
-        if (!checkoutResponse.ok) {
-            console.error('[BILLING] Checkout failed:', await checkoutResponse.text());
-            return NextResponse.json({ ok: false, error: 'Failed to create checkout' }, { status: 500 });
+        let appUrl: string;
+        if (forwardedHost) {
+            appUrl = `${forwardedProto || 'https'}://${forwardedHost}`;
+        } else {
+            appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         }
 
-        const { url } = await checkoutResponse.json();
+        console.log('[BILLING] Creating checkout for:', targetPlanId, 'customer:', userSub?.stripe_customer_id);
+
+        // Create checkout session directly
+        const session = await stripe.checkout.sessions.create({
+            customer: userSub?.stripe_customer_id || undefined,
+            customer_email: userSub?.stripe_customer_id ? undefined : user.email,
+            line_items: [
+                {
+                    price: targetPriceId,
+                    quantity: 1,
+                },
+            ],
+            mode: 'subscription',
+            success_url: `${appUrl}/app/billing?success=true`,
+            cancel_url: `${appUrl}/app/billing?canceled=true`,
+            metadata: {
+                userId: user.id,
+                planId: targetPlanId,
+            },
+        });
+
+        console.log('[BILLING] Checkout session created:', session.id);
         
         return NextResponse.json({
             ok: true,
             needsCheckout: true,
-            checkoutUrl: url
+            checkoutUrl: session.url
         });
 
     } catch (error: any) {

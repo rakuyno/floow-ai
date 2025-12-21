@@ -143,7 +143,7 @@ function BillingContent() {
             // If cancel to free
             if (result.action === 'canceled') {
                 niceAlert('Suscripción cancelada');
-                await fetchData();
+                await fetchData(); // ← Refresh data immediately
                 setShowPlanModal(false);
                 return;
             }
