@@ -64,6 +64,12 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
         setSelectedAvatar(avatar)
     }
 
+    const handleAvatarDoubleClick = (avatar: Avatar) => {
+        // Doble clic selecciona y confirma inmediatamente
+        onSelect(avatar)
+        onClose()
+    }
+
     const handleConfirmSelection = () => {
         if (selectedAvatar) {
             onSelect(selectedAvatar)
@@ -232,6 +238,7 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                                         <div
                                             key={avatar.id}
                                             onClick={() => handleAvatarSelect(avatar)}
+                                            onDoubleClick={() => handleAvatarDoubleClick(avatar)}
                                             className={`cursor-pointer relative rounded-lg overflow-hidden border-2 aspect-[9/16] group transition-all ${selectedAvatar?.id === avatar.id
                                                 ? 'border-indigo-600 ring-2 ring-indigo-600 ring-offset-2 shadow-lg'
                                                 : 'border-gray-200 hover:border-indigo-300 hover:shadow-md'
@@ -324,27 +331,33 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                     </div>
 
                     {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
-                        <p className="text-sm text-gray-600">
+                    <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50">
+                        <div className="text-sm">
                             {selectedAvatar ? (
-                                <span className="font-medium text-gray-900">Seleccionado: {selectedAvatar.name}</span>
+                                <div>
+                                    <p className="font-medium text-gray-900">Seleccionado: {selectedAvatar.name}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Haz doble clic para confirmar o usa el botón</p>
+                                </div>
                             ) : (
-                                'Selecciona un avatar o sube uno propio'
+                                <div>
+                                    <p className="text-gray-600">Selecciona un avatar o sube uno propio</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Doble clic para seleccionar directamente</p>
+                                </div>
                             )}
-                        </p>
-                        <div className="flex gap-3">
+                        </div>
+                        <div className="flex gap-3 w-full sm:w-auto">
                             <button
                                 onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleConfirmSelection}
                                 disabled={!selectedAvatar}
-                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                Confirmar Selección
+                                Confirmar
                             </button>
                         </div>
                     </div>
