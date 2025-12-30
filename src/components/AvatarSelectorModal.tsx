@@ -61,11 +61,22 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
 
 
     const handleAvatarSelect = (avatar: Avatar) => {
-        setSelectedAvatar(avatar)
+        // En móvil (o pantallas táctiles), un solo tap confirma inmediatamente
+        // En desktop, permite ver detalles antes de confirmar
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+        
+        if (isTouchDevice) {
+            // Móvil: selección directa
+            onSelect(avatar)
+            onClose()
+        } else {
+            // Desktop: permite ver detalles y confirmar después
+            setSelectedAvatar(avatar)
+        }
     }
 
     const handleAvatarDoubleClick = (avatar: Avatar) => {
-        // Doble clic selecciona y confirma inmediatamente
+        // Doble clic en desktop confirma inmediatamente
         onSelect(avatar)
         onClose()
     }
@@ -133,11 +144,12 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                 <div className="relative bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
 
                     {/* Header */}
-                    <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                        <h2 className="text-2xl font-bold text-gray-900">Elige un avatar</h2>
+                    <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between">
+                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Elige un avatar</h2>
                         <button
                             onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+                            aria-label="Cerrar"
                         >
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -205,13 +217,13 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                         </div>
 
                         {/* Avatar Grid */}
-                        <div className="flex-1 p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 180px)' }}>
                             {loading ? (
                                 <div className="flex items-center justify-center h-64">
                                     <div className="text-gray-500">Cargando avatares...</div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                                     {/* Upload Card */}
                                     <label className="cursor-pointer relative rounded-lg border-2 border-dashed border-gray-300 hover:border-indigo-500 flex flex-col items-center justify-center aspect-[9/16] text-gray-500 hover:text-indigo-600 transition-colors bg-gray-50 hover:bg-indigo-50">
                                         {uploading ? (
@@ -239,7 +251,7 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                                             key={avatar.id}
                                             onClick={() => handleAvatarSelect(avatar)}
                                             onDoubleClick={() => handleAvatarDoubleClick(avatar)}
-                                            className={`cursor-pointer relative rounded-lg overflow-hidden border-2 aspect-[9/16] group transition-all ${selectedAvatar?.id === avatar.id
+                                            className={`cursor-pointer relative rounded-lg overflow-hidden border-2 aspect-[9/16] group transition-all active:scale-95 ${selectedAvatar?.id === avatar.id
                                                 ? 'border-indigo-600 ring-2 ring-indigo-600 ring-offset-2 shadow-lg'
                                                 : 'border-gray-200 hover:border-indigo-300 hover:shadow-md'
                                                 }`}
@@ -330,32 +342,38 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                         )}
                     </div>
 
-                    {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50">
-                        <div className="text-sm">
+                    {/* Footer - Sticky en móvil para mejor accesibilidad */}
+                    <div className="sticky bottom-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 bg-white shadow-lg sm:shadow-none">
+                        <div className="text-sm hidden sm:block">
                             {selectedAvatar ? (
                                 <div>
                                     <p className="font-medium text-gray-900">Seleccionado: {selectedAvatar.name}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Haz doble clic para confirmar o usa el botón</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Haz doble clic o usa el botón para confirmar</p>
                                 </div>
                             ) : (
                                 <div>
                                     <p className="text-gray-600">Selecciona un avatar o sube uno propio</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Doble clic para seleccionar directamente</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Clic para elegir</p>
                                 </div>
                             )}
                         </div>
-                        <div className="flex gap-3 w-full sm:w-auto">
+                        {/* Info móvil - más compacta */}
+                        {selectedAvatar && (
+                            <div className="text-xs text-gray-600 sm:hidden">
+                                ✓ {selectedAvatar.name}
+                            </div>
+                        )}
+                        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
                             <button
                                 onClick={onClose}
-                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleConfirmSelection}
                                 disabled={!selectedAvatar}
-                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
                             >
                                 Confirmar
                             </button>
