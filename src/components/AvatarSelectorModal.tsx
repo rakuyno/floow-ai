@@ -81,12 +81,6 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
         onClose()
     }
 
-    const handleConfirmSelection = () => {
-        if (selectedAvatar) {
-            onSelect(selectedAvatar)
-            onClose()
-        }
-    }
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return
@@ -217,7 +211,7 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                         </div>
 
                         {/* Avatar Grid */}
-                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
                             {loading ? (
                                 <div className="flex items-center justify-center h-64">
                                     <div className="text-gray-500">Cargando avatares...</div>
@@ -340,44 +334,6 @@ export default function AvatarSelectorModal({ isOpen, onClose, onSelect, selecte
                                 </div>
                             </div>
                         )}
-                    </div>
-
-                    {/* Footer - Sticky en móvil para mejor accesibilidad */}
-                    <div className="sticky bottom-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 bg-white shadow-lg sm:shadow-none">
-                        <div className="text-sm hidden sm:block">
-                            {selectedAvatar ? (
-                                <div>
-                                    <p className="font-medium text-gray-900">Seleccionado: {selectedAvatar.name}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Haz doble clic o usa el botón para confirmar</p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <p className="text-gray-600">Selecciona un avatar o sube uno propio</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Clic para elegir</p>
-                                </div>
-                            )}
-                        </div>
-                        {/* Info móvil - más compacta */}
-                        {selectedAvatar && (
-                            <div className="text-xs text-gray-600 sm:hidden">
-                                ✓ {selectedAvatar.name}
-                            </div>
-                        )}
-                        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
-                            <button
-                                onClick={onClose}
-                                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleConfirmSelection}
-                                disabled={!selectedAvatar}
-                                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
-                            >
-                                Confirmar
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
