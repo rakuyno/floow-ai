@@ -15,6 +15,10 @@ export default function QuestionnairePage() {
   const [loading, setLoading] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [tokenBalance, setTokenBalance] = useState<number | null>(null)
+  const [files, setFiles] = useState<FileList | null>(null)
+  const [tiktokUrl, setTiktokUrl] = useState('')
+  const [additionalInstructions, setAdditionalInstructions] = useState('')
+  const [existingImages, setExistingImages] = useState<any[]>([])
 
   const [formData, setFormData] = useState<{
     product_name: string
@@ -46,6 +50,7 @@ export default function QuestionnairePage() {
 
   useEffect(() => {
     fetchTokenBalance()
+    fetchExistingImages()
   }, [])
 
   const fetchTokenBalance = async () => {
@@ -58,6 +63,15 @@ export default function QuestionnairePage() {
         .single()
       if (data) setTokenBalance(data.balance)
     }
+  }
+
+  const fetchExistingImages = async () => {
+    const { data } = await supabase
+      .from('ad_assets')
+      .select('*')
+      .eq('session_id', params.id)
+      .eq('type', 'image')
+    if (data) setExistingImages(data)
   }
 
   const handleAvatarSelect = (avatar: Avatar) => {
@@ -77,6 +91,12 @@ export default function QuestionnairePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validation: Require images
+    if (!files && existingImages.length === 0) {
+      niceAlert('Por favor, sube al menos una imagen de tu producto.')
+      return
+    }
+
     // Validation: Require avatar if style is avatar/mixed
     if ((formData.video_type === 'avatar' || formData.video_type === 'mixed') && !formData.avatar_id) {
       niceAlert('Por favor, selecciona un avatar para este estilo de vídeo.')
@@ -92,6 +112,38 @@ export default function QuestionnairePage() {
     setLoading(true)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autenticado')
+
+      // Upload new images if any
+      if (files) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]
+          const fileExt = file.name.split('.').pop()
+          const fileName = `${user.id}/${params.id}/${Math.random()}.${fileExt}`
+
+          const { error: uploadError } = await supabase.storage
+            .from('assets')
+            .upload(fileName, file)
+
+          if (uploadError) throw uploadError
+
+          await supabase.from('ad_assets').insert({
+            session_id: params.id,
+            user_id: user.id,
+            storage_path: fileName,
+            type: 'image'
+          })
+        }
+      }
+
+      // Update session with TikTok URL if provided
+      if (tiktokUrl) {
+        await supabase
+          .from('ad_sessions')
+          .update({ reference_tiktok_url: tiktokUrl })
+          .eq('id', params.id)
+      }
       // Map frontend video_type values to database values
       let videoTypeDb = formData.video_type
       if (formData.video_type === 'broll') videoTypeDb = 'product_only'
@@ -172,80 +224,117 @@ export default function QuestionnairePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Detalles del Anuncio</h1>
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Crear Nuevo Anuncio</h1>
+          <p className="mt-2 text-sm text-gray-600">Completa la información para generar tu video publicitario</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
 
-          {/* Product Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Nombre del Producto</label>
-            <input
-              type="text"
-              required
-              value={formData.product_name}
-              onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
-            />
+          {/* PASO 1: INFORMACIÓN BÁSICA */}
+          <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-600">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-sm">
+                1
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Información Básica</h2>
+            </div>
+
+            <div className="space-y-4">
+              {/* Product Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre del Producto <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.product_name}
+                  onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="Ej: Crema Facial Hidratante"
+                />
+              </div>
+
+              {/* Target Users */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Usuario Objetivo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.target_users}
+                  onChange={(e) => setFormData({ ...formData, target_users: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="Ej: Mujeres de 25-40 años que buscan cuidado de piel natural"
+                />
+                <p className="mt-1 text-xs text-gray-500">Describe quién es tu cliente ideal</p>
+              </div>
+
+              {/* Product Images */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Imágenes del Producto (1-5) <span className="text-red-500">*</span>
+                </label>
+                {existingImages.length > 0 && (
+                  <div className="mb-2 text-sm text-green-600">
+                    ✓ {existingImages.length} imagen(es) ya subida(s)
+                  </div>
+                )}
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => setFiles(e.target.files)}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+                <p className="mt-1 text-xs text-gray-500">Sube fotos de calidad de tu producto</p>
+              </div>
+            </div>
           </div>
 
-          {/* Target Users */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Usuario Objetivo (Target)</label>
-            <input
-              type="text"
-              required
-              value={formData.target_users}
-              onChange={(e) => setFormData({ ...formData, target_users: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
-              placeholder="Ej: Mujeres de 25-35 años interesadas en fitness"
-            />
+          {/* PASO 2: BENEFICIOS DEL PRODUCTO */}
+          <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-600">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-600 text-white font-bold text-sm">
+                2
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Beneficios y Características</h2>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ¿Qué hace especial a tu producto? <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                required
+                rows={5}
+                value={formData.selling_points}
+                onChange={(e) => setFormData({ ...formData, selling_points: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
+                placeholder="Escribe un beneficio por línea:&#10;Reduce arrugas visiblemente en 7 días&#10;Ingredientes 100% naturales&#10;Hidratación profunda 24h&#10;Testado dermatológicamente"
+              />
+              <p className="mt-1 text-xs text-gray-500">Escribe cada beneficio o característica en una línea nueva</p>
+            </div>
           </div>
 
-          {/* Selling Points */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Puntos de Venta (uno por línea)</label>
-            <textarea
-              required
-              rows={4}
-              value={formData.selling_points}
-              onChange={(e) => setFormData({ ...formData, selling_points: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
-              placeholder="Ingredientes naturales&#10;Envío gratis&#10;Resultados en 30 días"
-            />
-          </div>
+          {/* PASO 3: CONFIGURACIÓN DEL VIDEO */}
+          <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-600">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-sm">
+                3
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Configuración del Video</h2>
+            </div>
 
-          {/* Offer */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Oferta</label>
-            <input
-              type="text"
-              value={formData.offer}
-              onChange={(e) => setFormData({ ...formData, offer: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
-              placeholder="Ej: 50% de descuento hoy"
-            />
-          </div>
-
-          {/* CTA */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Llamada a la Acción (CTA)</label>
-            <input
-              type="text"
-              value={formData.cta}
-              onChange={(e) => setFormData({ ...formData, cta: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border text-gray-900"
-              placeholder="Ej: Compra ahora"
-            />
-          </div>
-
-
-
-          {/* Video Type - Card Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">Tipo de Video</label>
+            <div className="space-y-6">
+              {/* Video Type - Card Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Tipo de Video <span className="text-red-500">*</span>
+                </label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
                 type="button"
@@ -314,13 +403,15 @@ export default function QuestionnairePage() {
                   </div>
                 )}
               </button>
-            </div>
-          </div>
+                </div>
+              </div>
 
-          {/* Avatar Selection Section - Only if video type involves avatar */}
-          {(formData.video_type === 'avatar' || formData.video_type === 'mixed') && (
-            <div className="border-t pt-6 mt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Avatar</h3>
+              {/* Avatar Selection Section - Only if video type involves avatar */}
+              {(formData.video_type === 'avatar' || formData.video_type === 'mixed') && (
+                <div className="pt-4 border-t">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Seleccionar Avatar <span className="text-red-500">*</span>
+                  </label>
 
               {formData.avatar_id ? (
                 <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -359,9 +450,11 @@ export default function QuestionnairePage() {
             </div>
           )}
 
-          {/* Audio Mode - Redesigned with user-friendly labels */}
-          <div className="border-t pt-6 mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">Audio del anuncio</label>
+              {/* Audio Mode - Redesigned with user-friendly labels */}
+              <div className="pt-4 border-t">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Audio del Anuncio <span className="text-red-500">*</span>
+                </label>
             <div className="space-y-3">
               <label className="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
                 <input
@@ -411,14 +504,14 @@ export default function QuestionnairePage() {
                   </p>
                 </div>
               </label>
-            </div>
-          </div>
+                </div>
+              </div>
 
-          {/* Language selector (EN / ES) */}
-          <div className="border-t pt-6 mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Idioma del anuncio (guion, TTS y audio RAW)
-            </label>
+              {/* Language selector (EN / ES) */}
+              <div className="pt-4 border-t">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Idioma del Anuncio <span className="text-red-500">*</span>
+                </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
                 <input
@@ -446,65 +539,144 @@ export default function QuestionnairePage() {
                   🇪🇸 Español
                 </span>
               </label>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  El guion, la voz en off (TTS) y el audio se generan en el idioma seleccionado
+                </p>
+              </div>
+
+              {/* Scenes Slider */}
+              <div className="pt-4 border-t">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Número de Escenas <span className="text-red-500">*</span>: <span className="text-indigo-600 font-bold">{formData.num_scenes}</span>
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={formData.num_scenes}
+                  onChange={(e) => setFormData({ ...formData, num_scenes: parseInt(e.target.value) })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>1 escena</span>
+                  <span>10 escenas</span>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">Más escenas = video más largo y completo</p>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 mt-2">
-              El guion, la voz en off (TTS) y el audio RAW procesado por ElevenLabs se generan en el idioma seleccionado.
-            </p>
           </div>
 
-          {/* Scenes Slider */}
-          <div className="border-t pt-6 mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Número de Escenas: <span className="text-indigo-600 font-bold">{formData.num_scenes}</span>
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={formData.num_scenes}
-              onChange={(e) => setFormData({ ...formData, num_scenes: parseInt(e.target.value) })}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1 escena</span>
-              <span>10 escenas</span>
+          {/* PASO 4: MARKETING (OPCIONAL) */}
+          <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-lg shadow border-l-4 border-amber-500">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500 text-white font-bold text-sm">
+                4
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Marketing y Extras</h2>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                💡 Opcional
+              </span>
+            </div>
+            <p className="text-sm text-gray-600 mb-4 ml-11">Estos campos son opcionales pero pueden mejorar tu anuncio</p>
+
+            <div className="space-y-4 ml-11">
+              {/* Offer */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Oferta Especial <span className="text-gray-400 text-xs">(Opcional)</span> 💡
+                </label>
+                <input
+                  type="text"
+                  value={formData.offer}
+                  onChange={(e) => setFormData({ ...formData, offer: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="Ej: 50% descuento, Envío gratis, 2x1, Oferta limitada"
+                />
+                <p className="mt-1 text-xs text-gray-500">Promoción o descuento especial que quieras destacar</p>
+              </div>
+
+              {/* CTA */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Llamada a la Acción <span className="text-gray-400 text-xs">(Opcional)</span> 💡
+                </label>
+                <input
+                  type="text"
+                  value={formData.cta}
+                  onChange={(e) => setFormData({ ...formData, cta: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="Ej: Compra ahora, Consigue el tuyo, Visita nuestra web, Descúbrelo"
+                />
+                <p className="mt-1 text-xs text-gray-500">Acción que quieres que tome el espectador</p>
+              </div>
+
+              {/* TikTok Reference */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Referencia TikTok <span className="text-gray-400 text-xs">(Opcional)</span> 💡
+                </label>
+                <input
+                  type="url"
+                  value={tiktokUrl}
+                  onChange={(e) => setTiktokUrl(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="https://www.tiktok.com/@user/video/..."
+                />
+                <p className="mt-1 text-xs text-gray-500">URL de un video de TikTok que te inspire</p>
+              </div>
+
+              {/* Additional Instructions */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Instrucciones Adicionales <span className="text-gray-400 text-xs">(Opcional)</span> 💡
+                </label>
+                <textarea
+                  rows={3}
+                  value={additionalInstructions}
+                  onChange={(e) => setAdditionalInstructions(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-3 py-2 border text-gray-900"
+                  placeholder="Cualquier detalle especial o preferencia que quieras que tengamos en cuenta..."
+                />
+                <p className="mt-1 text-xs text-gray-500">Agrega cualquier indicación extra sobre el tono, estilo o contenido</p>
+              </div>
             </div>
           </div>
 
           {/* Token Summary */}
-          <div className="bg-gray-100 p-4 rounded-lg flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-600">Coste:</p>
-              <p className="text-lg font-bold text-gray-900">{totalCost} tokens</p>
+          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-600">Coste Total:</p>
+                <p className="text-2xl font-bold text-gray-900">{totalCost} tokens</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Tu Saldo:</p>
+                <p className={`text-2xl font-bold ${hasInsufficientTokens ? 'text-red-600' : 'text-green-600'}`}>
+                  {tokenBalance !== null ? tokenBalance : '...'} tokens
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Tu saldo:</p>
-              <p className={`text-lg font-bold ${hasInsufficientTokens ? 'text-red-600' : 'text-green-600'}`}>
-                {tokenBalance !== null ? tokenBalance : '...'} tokens
-              </p>
-            </div>
+            {hasInsufficientTokens && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-700">⚠️ Saldo insuficiente. Necesitas comprar más tokens para continuar.</p>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-between items-center pt-6">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="text-sm font-medium text-gray-600 hover:text-gray-800"
-            >
-              ← Atrás
-            </button>
+          <div className="flex justify-end items-center pt-6">
             <button
               type="submit"
               disabled={loading || isBalanceLoading || hasInsufficientTokens}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 font-medium shadow-sm"
+              className="bg-indigo-600 text-white px-8 py-3 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-lg text-base transition-all"
             >
               {loading
-                ? 'Guardando...'
+                ? '⏳ Generando...'
                 : hasInsufficientTokens
-                  ? 'Saldo insuficiente'
+                  ? '⚠️ Saldo insuficiente'
                   : isBalanceLoading
-                    ? 'Cargando saldo...'
-                    : 'Continuar al Storyboard'}
+                    ? '⏳ Cargando...'
+                    : '🚀 Generar Video'}
             </button>
           </div>
 
