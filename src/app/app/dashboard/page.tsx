@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import AdActions from './ad-actions'
-import TokenCounter from '@/components/TokenCounter'
 import ErrorHintBubble from '@/components/ErrorHintBubble'
 
 export default async function DashboardPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
@@ -112,11 +111,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
             Mis Anuncios
           </h2>
         </div>
-        <div className="mt-4 flex items-center gap-4 md:ml-4 md:mt-0">
-          <TokenCounter />
+        <div className="mt-4 flex md:ml-4 md:mt-0">
           <Link
             href="/app/new"
-            className="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             Nuevo Anuncio
           </Link>

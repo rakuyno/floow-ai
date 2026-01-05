@@ -131,9 +131,50 @@ export async function POST(req: Request) {
             case 'checkout.session.completed': {
                 console.log('[WEBHOOK] checkout.session.completed');
                 
-                const subscriptionId = normalizeId(session.subscription);
                 const customerId = normalizeId(session.customer);
                 const userId = session.metadata?.userId;
+                const purchaseType = session.metadata?.purchaseType;
+
+                console.log('[WEBHOOK] Mode:', session.mode);
+                console.log('[WEBHOOK] Metadata:', session.metadata);
+
+                // Check if this is a TOKEN PURCHASE (one-time payment)
+                if (session.mode === 'payment' && purchaseType === 'token_package') {
+                    console.log('[WEBHOOK] 🪙 Token purchase detected');
+                    
+                    const tokenAmount = parseInt(session.metadata?.tokenAmount || '0');
+                    
+                    if (!userId || !tokenAmount) {
+                        console.error('[WEBHOOK] ❌ Missing userId or tokenAmount');
+                        throw new Error('Missing userId or tokenAmount for token purchase');
+                    }
+
+                    console.log('[WEBHOOK] 💰 Adding tokens:', tokenAmount);
+
+                    // Use adjust_tokens to add tokens
+                    const { error: tokensError } = await supabaseAdmin
+                        .rpc('adjust_tokens', {
+                            p_user_id: userId,
+                            p_amount: tokenAmount,
+                            p_reason: 'token_purchase',
+                            p_metadata: {
+                                tokenAmount,
+                                sessionId: session.id,
+                                from: 'checkout.session.completed'
+                            }
+                        });
+
+                    if (tokensError) {
+                        console.error('[WEBHOOK] ❌ adjust_tokens error:', tokensError);
+                        throw tokensError;
+                    }
+
+                    console.log('[WEBHOOK] ✅ Tokens added successfully:', tokenAmount);
+                    break;
+                }
+
+                // Otherwise, it's a SUBSCRIPTION
+                const subscriptionId = normalizeId(session.subscription);
                 const planId = session.metadata?.planId;
 
                 console.log('[WEBHOOK] Data:', { subscriptionId, customerId, userId, planId });

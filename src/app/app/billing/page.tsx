@@ -29,6 +29,19 @@ interface LedgerEntry {
     created_at: string;
 }
 
+// Token packages for slider
+const TOKEN_PACKAGES = [
+    { tokens: 100, price: 15, scenes: 10 },
+    { tokens: 300, price: 39, scenes: 30 },
+    { tokens: 600, price: 69, scenes: 60 },
+    { tokens: 1200, price: 129, scenes: 120 },
+    { tokens: 3000, price: 299, scenes: 300 },
+    { tokens: 6000, price: 549, scenes: 600 },
+];
+
+// Helper: Calculate video seconds from tokens (10 tokens = 4 seconds)
+const tokensToSeconds = (tokens: number) => Math.floor((tokens * 4) / 10);
+
 function BillingContent() {
     const [plans, setPlans] = useState<Plan[]>([]);
     const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -37,6 +50,8 @@ function BillingContent() {
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [showPlanModal, setShowPlanModal] = useState(false);
+    const [tokenSliderIndex, setTokenSliderIndex] = useState(2); // Default to 600 tokens
+    const [buyingTokens, setBuyingTokens] = useState(false);
 
     const supabase = createClient();
     const router = useRouter();
@@ -177,6 +192,28 @@ function BillingContent() {
         }
     }
 
+    // Handle buy tokens
+    async function handleBuyTokens() {
+        setBuyingTokens(true);
+        try {
+            const selectedPackage = TOKEN_PACKAGES[tokenSliderIndex];
+            const response = await fetch('/api/billing/buy-tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokenAmount: selectedPackage.tokens })
+            });
+
+            if (!response.ok) throw new Error('Failed to create checkout session');
+
+            const { checkoutUrl } = await response.json();
+            window.location.href = checkoutUrl;
+        } catch (error) {
+            console.error(error);
+            niceAlert('Error al procesar la compra');
+            setBuyingTokens(false);
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -251,10 +288,10 @@ function BillingContent() {
                 </div>
             </div>
 
-            {/* Modal de cambio de plan (cards simples) */}
+            {/* Modal de cambio de plan (diseño actualizado) */}
             {showPlanModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-5xl w-full p-6 relative">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-6xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h2 className="text-2xl font-semibold text-gray-900">Cambiar plan</h2>
@@ -276,39 +313,63 @@ function BillingContent() {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                            {/* Plan Cards */}
                             {plans.map(plan => {
-                                const planIndex = planOrder.indexOf(plan.id);
-                                const currentIndex = planOrder.indexOf(currentPlanId);
                                 const isCurrent = plan.id === currentPlanId;
-
-                                // Simple CTA label
+                                const videoSeconds = tokensToSeconds(plan.monthly_tokens);
                                 let ctaLabel = 'Cambiar';
                                 if (isCurrent) ctaLabel = 'Plan actual';
 
                                 return (
-                                    <div key={plan.id} className="border rounded-xl p-4 flex flex-col">
-                                        <div className="mb-2">
-                                            <p className="text-sm text-gray-500 uppercase">{plan.id === 'free' ? 'Gratis' : 'Plan'}</p>
-                                            <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                                        </div>
+                                    <div
+                                        key={plan.id}
+                                        className="relative flex flex-col rounded-2xl border p-6 shadow-sm border-gray-200"
+                                    >
                                         <div className="mb-4">
-                                            <p className="text-3xl font-bold text-gray-900">
-                                                {plan.monthly_price_cents === 0 ? '€0' : `€${plan.monthly_price_cents / 100}`}
+                                            <h3 className="text-lg font-semibold leading-8 text-gray-900">{plan.name}</h3>
+                                            <p className="mt-2 flex items-baseline gap-x-1">
+                                                <span className="text-3xl font-bold tracking-tight text-gray-900">
+                                                    {plan.monthly_price_cents === 0 ? '€0' : `€${plan.monthly_price_cents / 100}`}
+                                                </span>
+                                                <span className="text-sm font-semibold leading-6 text-gray-600">/mes</span>
                                             </p>
-                                            <p className="text-sm text-gray-500">/mes · {plan.monthly_tokens} tokens</p>
                                         </div>
-                                        <div className="flex-1 mb-4 text-sm text-gray-600 space-y-1">
-                                            <p>• Tokens mensuales: {plan.monthly_tokens}</p>
-                                            <p>• Sin marca de agua {plan.id === 'free' ? '(no aplica)' : ''}</p>
-                                        </div>
+                                        <ul role="list" className="mb-6 space-y-3 text-sm leading-6 text-gray-600 flex-1">
+                                            <li className="flex gap-x-3">
+                                                <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                                </svg>
+                                                <span><strong>{plan.monthly_tokens} tokens</strong>/mes</span>
+                                            </li>
+                                            <li className="flex gap-x-3">
+                                                <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                                </svg>
+                                                <span>≈ {videoSeconds}s de vídeo</span>
+                                            </li>
+                                            <li className="flex gap-x-3">
+                                                <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                                </svg>
+                                                <span>{plan.id === 'free' ? 'Con Marca de Agua' : 'Sin Marca de Agua'}</span>
+                                            </li>
+                                            {plan.id !== 'free' && plan.id !== 'starter' && (
+                                                <li className="flex gap-x-3">
+                                                    <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span>Soporte Prioritario</span>
+                                                </li>
+                                            )}
+                                        </ul>
                                         <button
                                             onClick={() => handleChangePlan(plan.id)}
                                             disabled={processing || isCurrent}
-                                            className={`mt-auto w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                                            className={`mt-auto block w-full rounded-md px-3 py-2 text-center text-sm font-semibold shadow-sm ${
                                                 isCurrent
                                                     ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+                                                    : 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
                                             }`}
                                         >
                                             {processing && !isCurrent ? 'Procesando...' : ctaLabel}
@@ -316,6 +377,73 @@ function BillingContent() {
                                     </div>
                                 );
                             })}
+
+                            {/* Token Purchase Card */}
+                            <div className="relative flex flex-col rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-md">
+                                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-600 text-xs font-medium text-white">
+                                    🪙 Compra Puntual
+                                </div>
+                                <div className="mb-4">
+                                    <h3 className="text-lg font-semibold leading-8 text-gray-900">Tokens Extras</h3>
+                                    <p className="mt-2 flex items-baseline gap-x-1">
+                                        <span className="text-3xl font-bold tracking-tight text-emerald-700">
+                                            €{TOKEN_PACKAGES[tokenSliderIndex].price}
+                                        </span>
+                                    </p>
+                                </div>
+                                
+                                <div className="mb-6 space-y-4 flex-1">
+                                    <div className="bg-white/80 rounded-lg p-3 text-center">
+                                        <div className="text-2xl font-bold text-emerald-700">{TOKEN_PACKAGES[tokenSliderIndex].tokens}</div>
+                                        <div className="text-xs text-gray-600">tokens</div>
+                                    </div>
+                                    
+                                    {/* Slider */}
+                                    <div className="space-y-2">
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max={TOKEN_PACKAGES.length - 1}
+                                            value={tokenSliderIndex}
+                                            onChange={(e) => setTokenSliderIndex(parseInt(e.target.value))}
+                                            className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                        />
+                                        <div className="flex justify-between text-[10px] text-gray-500 px-1">
+                                            <span>100</span>
+                                            <span>6000</span>
+                                        </div>
+                                    </div>
+
+                                    <ul className="space-y-2 text-xs text-gray-600">
+                                        <li className="flex gap-x-2">
+                                            <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                            </svg>
+                                            <span>≈ {TOKEN_PACKAGES[tokenSliderIndex].scenes} escenas</span>
+                                        </li>
+                                        <li className="flex gap-x-2">
+                                            <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                            </svg>
+                                            <span>Se suman a tu saldo</span>
+                                        </li>
+                                        <li className="flex gap-x-2">
+                                            <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                            </svg>
+                                            <span>No caducan</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                
+                                <button
+                                    onClick={handleBuyTokens}
+                                    disabled={buyingTokens}
+                                    className="mt-auto block w-full rounded-md px-3 py-2 text-center text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-50"
+                                >
+                                    {buyingTokens ? 'Procesando...' : 'Comprar Ahora'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
