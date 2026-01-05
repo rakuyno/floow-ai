@@ -223,11 +223,11 @@ export default function QuestionnairePage() {
   }, [formData.video_type])
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-8 lg:py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Crear Nuevo Anuncio</h1>
-          <p className="mt-2 text-sm text-gray-600">Completa la información para generar tu video publicitario</p>
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Crear Nuevo Anuncio</h1>
+          <p className="mt-1 sm:mt-2 text-sm text-gray-600">Completa la información para generar tu video publicitario</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -547,22 +547,53 @@ export default function QuestionnairePage() {
 
               {/* Scenes Slider */}
               <div className="pt-4 border-t">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Escenas <span className="text-red-500">*</span>: <span className="text-indigo-600 font-bold">{formData.num_scenes}</span>
-                </label>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Número de Escenas <span className="text-red-500">*</span>
+                  </label>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-indigo-600">{formData.num_scenes}</div>
+                    <div className="text-xs text-gray-500">escenas</div>
+                  </div>
+                </div>
+                
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">Coste de esta configuración:</span>
+                    <div className="text-right">
+                      <span className="text-xl font-bold text-indigo-600">{totalCost}</span>
+                      <span className="text-sm text-gray-600 ml-1">tokens</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formData.num_scenes} escena{formData.num_scenes !== 1 ? 's' : ''} × 10 tokens = {totalCost} tokens
+                  </div>
+                </div>
+
                 <input
                   type="range"
                   min="1"
                   max="10"
                   value={formData.num_scenes}
                   onChange={(e) => setFormData({ ...formData, num_scenes: parseInt(e.target.value) })}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  style={{
+                    background: `linear-gradient(to right, rgb(79 70 229) 0%, rgb(79 70 229) ${((formData.num_scenes - 1) / 9) * 100}%, rgb(229 231 235) ${((formData.num_scenes - 1) / 9) * 100}%, rgb(229 231 235) 100%)`
+                  }}
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>1 escena</span>
-                  <span>10 escenas</span>
+                  <span>1</span>
+                  <span>2</span>
+                  <span>3</span>
+                  <span>4</span>
+                  <span>5</span>
+                  <span>6</span>
+                  <span>7</span>
+                  <span>8</span>
+                  <span>9</span>
+                  <span>10</span>
                 </div>
-                <p className="mt-2 text-xs text-gray-500">Más escenas = video más largo y completo</p>
+                <p className="mt-2 text-xs text-gray-500">💡 Más escenas = video más largo y completo</p>
               </div>
             </div>
           </div>
