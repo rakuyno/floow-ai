@@ -33,7 +33,7 @@ BEGIN
     
     IF v_current_balance IS NULL THEN
         -- Initialize if not exists
-        INSERT INTO public.user_token_balances (user_id, balance, last_updated)
+        INSERT INTO public.user_token_balances (user_id, balance, updated_at)
         VALUES (p_user_id, 0, NOW());
         v_current_balance := 0;
     END IF;
@@ -43,7 +43,7 @@ BEGIN
     
     -- Update balance
     UPDATE public.user_token_balances
-    SET balance = v_new_balance, last_updated = NOW()
+    SET balance = v_new_balance, updated_at = NOW()
     WHERE user_id = p_user_id;
     
     -- Insert ledger entry

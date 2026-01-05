@@ -65,12 +65,24 @@ export async function POST(req: NextRequest) {
         }
 
         // ============================================================
-        // CASE 2: Any paid plan → Create Checkout Session
+        // CASE 2: Any paid plan → Cancel old sub + Create Checkout Session
         // ============================================================
         
         const targetPriceId = STRIPE_PRICES[targetPlanId as keyof typeof STRIPE_PRICES];
         if (!targetPriceId) {
             return NextResponse.json({ ok: false, error: 'Price not configured' }, { status: 500 });
+        }
+
+        // IMPORTANT: Cancel old subscription FIRST if exists
+        if (userSub?.stripe_subscription_id) {
+            console.log('[BILLING] Canceling old subscription before creating new one:', userSub.stripe_subscription_id);
+            try {
+                await stripe.subscriptions.cancel(userSub.stripe_subscription_id);
+                console.log('[BILLING] ✅ Old subscription canceled successfully');
+            } catch (cancelError: any) {
+                console.error('[BILLING] ⚠️ Failed to cancel old subscription:', cancelError.message);
+                // Continue anyway - webhook will handle cleanup
+            }
         }
 
         // Determine app URL

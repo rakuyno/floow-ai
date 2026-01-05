@@ -29,12 +29,12 @@ BEGIN
     v_new_balance := p_target_amount;
     
     -- Upsert balance
-    INSERT INTO public.user_token_balances (user_id, balance, last_updated)
+    INSERT INTO public.user_token_balances (user_id, balance, updated_at)
     VALUES (p_user_id, v_new_balance, NOW())
     ON CONFLICT (user_id)
     DO UPDATE SET
         balance = v_new_balance,
-        last_updated = NOW();
+        updated_at = NOW();
     
     -- Record in ledger (only if there's a change)
     IF v_delta != 0 THEN
