@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe, STRIPE_PRICES, PLANS } from '@/lib/stripe';
+import { stripe, getPriceId, PLANS, type PlanId } from '@/lib/stripe';
+import { normalizeMarket, type Market, marketFromPath, MARKET_COOKIE_NAME } from '@/lib/market';
 
 function resolveAppUrl(req: Request) {
     const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -23,15 +24,39 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { planId } = body;
+        const { planId, market: clientMarket } = body;
 
         if (!planId || !Object.values(PLANS).includes(planId)) {
             return new NextResponse('Invalid plan ID', { status: 400 });
         }
 
-        const priceId = STRIPE_PRICES[planId as keyof typeof STRIPE_PRICES];
+        // Determine market from multiple sources with priority
+        // 1. Request body (explicit market from client)
+        // 2. Referer header (extract from path like /es/billing)
+        // 3. Cookie
+        // 4. Default to 'us'
+        let market: Market;
+        
+        if (clientMarket) {
+            market = normalizeMarket(clientMarket);
+        } else {
+            const referer = req.headers.get('referer');
+            if (referer) {
+                const refererUrl = new URL(referer);
+                const pathMarket = marketFromPath(refererUrl.pathname);
+                market = pathMarket || normalizeMarket(req.cookies.get(MARKET_COOKIE_NAME)?.value);
+            } else {
+                market = normalizeMarket(req.cookies.get(MARKET_COOKIE_NAME)?.value);
+            }
+        }
+
+        console.log('[STRIPE CHECKOUT] Market detected:', market, 'for plan:', planId);
+
+        // Get market-specific price ID
+        const priceId = getPriceId(market, planId as PlanId);
         if (!priceId) {
-            return new NextResponse('Price not configured for this plan', { status: 500 });
+            console.error('[STRIPE CHECKOUT] No price ID configured for market:', market, 'plan:', planId);
+            return new NextResponse('Price not configured for this market and plan', { status: 500 });
         }
 
         // Get user's Stripe Customer ID
@@ -62,7 +87,7 @@ export async function POST(req: NextRequest) {
 
         const appUrl = resolveAppUrl(req);
 
-        // Create Checkout Session
+        // Create Checkout Session with market-specific price
         const checkoutSession = await stripe.checkout.sessions.create({
             customer: stripeCustomerId,
             mode: 'subscription',
@@ -73,19 +98,23 @@ export async function POST(req: NextRequest) {
                     quantity: 1,
                 },
             ],
-            success_url: `${appUrl}/app/billing?success=true`,
-            cancel_url: `${appUrl}/app/billing?canceled=true`,
+            success_url: `${appUrl}/${market}/app/billing?success=true`,
+            cancel_url: `${appUrl}/${market}/app/billing?canceled=true`,
             metadata: {
                 userId: user.id,
                 planId: planId,
+                market: market, // Store market for webhook processing
             },
             subscription_data: {
                 metadata: {
                     userId: user.id,
-                    planId: planId
+                    planId: planId,
+                    market: market,
                 }
             }
         });
+
+        console.log('[STRIPE CHECKOUT] Session created:', checkoutSession.id, 'for market:', market);
 
         return NextResponse.json({ url: checkoutSession.url });
     } catch (error: any) {

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
+import { normalizeMarket, type Market, marketFromPath, MARKET_COOKIE_NAME } from '@/lib/market';
 
 // Token packages configuration
+// TODO: Consider market-specific token prices if needed
+// For now, using single EUR-based prices (can be extended to per-market pricing)
 const TOKEN_PACKAGES = {
     '100': { tokens: 100, priceId: process.env.STRIPE_PRICE_100TK, price: 15 },
     '300': { tokens: 300, priceId: process.env.STRIPE_PRICE_300TK, price: 39 },
@@ -22,9 +25,25 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { tokenAmount } = body;
+        const { tokenAmount, market: clientMarket } = body;
 
-        console.log('[BUY-TOKENS] Purchase request:', { userId: user.id, tokenAmount });
+        // Determine market
+        let market: Market;
+        
+        if (clientMarket) {
+            market = normalizeMarket(clientMarket);
+        } else {
+            const referer = req.headers.get('referer');
+            if (referer) {
+                const refererUrl = new URL(referer);
+                const pathMarket = marketFromPath(refererUrl.pathname);
+                market = pathMarket || normalizeMarket(req.cookies.get(MARKET_COOKIE_NAME)?.value);
+            } else {
+                market = normalizeMarket(req.cookies.get(MARKET_COOKIE_NAME)?.value);
+            }
+        }
+
+        console.log('[BUY-TOKENS] Purchase request:', { userId: user.id, tokenAmount, market });
 
         // Validate token amount
         const packageKey = String(tokenAmount) as keyof typeof TOKEN_PACKAGES;
@@ -57,7 +76,7 @@ export async function POST(req: NextRequest) {
             appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         }
 
-        console.log('[BUY-TOKENS] Creating checkout session for:', tokenAmount, 'tokens');
+        console.log('[BUY-TOKENS] Creating checkout session for:', tokenAmount, 'tokens, market:', market);
 
         // Create one-time payment checkout session
         const session = await stripe.checkout.sessions.create({
@@ -70,16 +89,17 @@ export async function POST(req: NextRequest) {
                 },
             ],
             mode: 'payment', // ONE-TIME payment, not subscription
-            success_url: `${appUrl}/app/billing?token_purchase=success`,
-            cancel_url: `${appUrl}/app/billing?token_purchase=canceled`,
+            success_url: `${appUrl}/${market}/app/billing?token_purchase=success`,
+            cancel_url: `${appUrl}/${market}/app/billing?token_purchase=canceled`,
             metadata: {
                 userId: user.id,
                 tokenAmount: String(tokenAmount),
                 purchaseType: 'token_package',
+                market: market,
             },
         });
 
-        console.log('[BUY-TOKENS] Checkout session created:', session.id);
+        console.log('[BUY-TOKENS] Checkout session created:', session.id, 'for market:', market);
         
         return NextResponse.json({
             ok: true,
@@ -94,4 +114,3 @@ export async function POST(req: NextRequest) {
         }, { status: 500 });
     }
 }
-

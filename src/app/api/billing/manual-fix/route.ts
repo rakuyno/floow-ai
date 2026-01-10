@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe, STRIPE_PRICES } from '@/lib/stripe';
+import { stripe, getPlanFromPriceId } from '@/lib/stripe';
 
 /**
  * TEMPORAL - Manual subscription fix
@@ -47,16 +47,9 @@ export async function POST(req: NextRequest) {
         // Get the MOST RECENT subscription (last one created)
         const latestSub = subscriptions.data.sort((a, b) => b.created - a.created)[0];
         
-        // Map price to plan
+        // Map price to plan using multi-market function
         const priceId = latestSub.items.data[0].price.id;
-        let planId: string | null = null;
-        
-        for (const [planKey, planPriceId] of Object.entries(STRIPE_PRICES)) {
-            if (planPriceId === priceId) {
-                planId = planKey;
-                break;
-            }
-        }
+        const planId = getPlanFromPriceId(priceId);
 
         if (!planId) {
             return NextResponse.json({ 

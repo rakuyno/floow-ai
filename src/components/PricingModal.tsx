@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { createClient } from '@/lib/supabase/client'
+import { useMarket } from '@/lib/hooks/useMarket'
+import { centsToAmount } from '@/lib/i18n'
 
 interface Plan {
     id: string
@@ -38,6 +40,9 @@ export default function PricingModal({ isOpen, onClose, currentPlanId = 'free' }
     const [tokenSliderIndex, setTokenSliderIndex] = useState(2) // Default to 600 tokens
     const [buyingTokens, setBuyingTokens] = useState(false)
     const supabase = createClient()
+    
+    // Get current market using custom hook
+    const market = useMarket()
 
     useEffect(() => {
         if (isOpen) {
@@ -73,7 +78,7 @@ export default function PricingModal({ isOpen, onClose, currentPlanId = 'free' }
             const response = await fetch('/api/billing/change-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetPlanId: planId })
+                body: JSON.stringify({ targetPlanId: planId, market })
             })
 
             if (!response.ok) throw new Error('Failed to create checkout session')
@@ -96,7 +101,7 @@ export default function PricingModal({ isOpen, onClose, currentPlanId = 'free' }
             const response = await fetch('/api/billing/buy-tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokenAmount: selectedPackage.tokens })
+                body: JSON.stringify({ tokenAmount: selectedPackage.tokens, market })
             })
 
             if (!response.ok) throw new Error('Failed to create checkout session')
@@ -187,13 +192,13 @@ export default function PricingModal({ isOpen, onClose, currentPlanId = 'free' }
                                                         </div>
                                                     )}
                                                     <div className="mb-4">
-                                                        <h3 className="text-lg font-semibold leading-8 text-gray-900">{plan.name}</h3>
-                                                        <p className="mt-2 flex items-baseline gap-x-1">
-                                                            <span className="text-3xl font-bold tracking-tight text-gray-900">
-                                                                {plan.monthly_price_cents === 0 ? 'Gratis' : `€${plan.monthly_price_cents / 100}`}
-                                                            </span>
-                                                            <span className="text-sm font-semibold leading-6 text-gray-600">/mes</span>
-                                                        </p>
+                                        <h3 className="text-lg font-semibold leading-8 text-gray-900">{plan.name}</h3>
+                                        <p className="mt-2 flex items-baseline gap-x-1">
+                                            <span className="text-3xl font-bold tracking-tight text-gray-900">
+                                                {plan.monthly_price_cents === 0 ? 'Gratis' : centsToAmount(plan.monthly_price_cents, market)}
+                                            </span>
+                                            <span className="text-sm font-semibold leading-6 text-gray-600">/mes</span>
+                                        </p>
                                                     </div>
                                                     <ul role="list" className="mb-6 space-y-3 text-sm leading-6 text-gray-600 flex-1">
                                                         <li className="flex gap-x-3">
@@ -247,7 +252,7 @@ export default function PricingModal({ isOpen, onClose, currentPlanId = 'free' }
                                                 <h3 className="text-lg font-semibold leading-8 text-gray-900">Tokens Extras</h3>
                                                 <p className="mt-2 flex items-baseline gap-x-1">
                                                     <span className="text-3xl font-bold tracking-tight text-emerald-700">
-                                                        €{selectedTokenPackage.price}
+                                                        {centsToAmount(selectedTokenPackage.price * 100, market)}
                                                     </span>
                                                 </p>
                                             </div>
