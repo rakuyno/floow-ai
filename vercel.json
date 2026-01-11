@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-token-reset",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
+

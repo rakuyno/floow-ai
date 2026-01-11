@@ -73,10 +73,10 @@ function normalizeId(obj: any): string | null {
 async function findUserSubscription(customerId: string | null, subscriptionId?: string | null) {
     if (!customerId) return null;
     
-    // First try by customer_id
+    // First try by customer_id - SELECT ALL fields needed for token resets
     let result = await supabaseAdmin
         .from('user_subscriptions')
-        .select('*')
+        .select('*, pending_plan_id, pending_effective_date, pending_subscription_id')
         .eq('stripe_customer_id', customerId)
         .maybeSingle();
 
@@ -88,7 +88,7 @@ async function findUserSubscription(customerId: string | null, subscriptionId?: 
     if (subscriptionId) {
         result = await supabaseAdmin
             .from('user_subscriptions')
-            .select('*')
+            .select('*, pending_plan_id, pending_effective_date, pending_subscription_id')
             .eq('stripe_subscription_id', subscriptionId)
             .maybeSingle();
     }
@@ -189,10 +189,10 @@ export async function POST(req: Request) {
                     throw new Error('Missing subscription or customer ID');
                 }
 
-                // Get current subscription from DB
+                // Get current subscription from DB (need plan_id for upgrade/downgrade detection)
                 const { data: currentSub } = await supabaseAdmin
                     .from('user_subscriptions')
-                    .select('stripe_subscription_id')
+                    .select('stripe_subscription_id, plan_id, pending_plan_id, pending_effective_date, pending_subscription_id')
                     .eq('user_id', userId)
                     .maybeSingle();
 
@@ -234,25 +234,107 @@ export async function POST(req: Request) {
 
                 console.log('[WEBHOOK] ✅ Subscription upserted:', { userId, planId, subscriptionId });
 
-                // ACCUMULATE TOKENS (not reset)
-                console.log('[WEBHOOK] 💰 Granting plan tokens (accumulate)');
-                const { data: tokensResult, error: tokensError } = await supabaseAdmin
-                    .rpc('grant_plan_tokens', {
-                        p_user_id: userId,
-                        p_plan_id: planId,
-                        p_reason: 'plan_change_grant',
-                        p_metadata: {
-                            subscriptionId,
-                            from: 'checkout.session.completed'
-                        }
-                    });
+                // ============================================================
+                // SMART TOKEN GRANT: UPGRADE vs DOWNGRADE
+                // ============================================================
+                
+                // Get plan order (higher = better plan)
+                const PLAN_ORDER: Record<string, number> = {
+                    'free': 0,
+                    'starter': 1,
+                    'growth': 2,
+                    'agency': 3
+                };
+                
+                const currentPlanOrder = PLAN_ORDER[currentSub?.plan_id || 'free'] || 0;
+                const newPlanOrder = PLAN_ORDER[planId] || 0;
+                
+                const isUpgrade = newPlanOrder > currentPlanOrder;
+                const isDowngrade = newPlanOrder < currentPlanOrder;
+                
+                // Extract billing interval from metadata (default to monthly)
+                const billingInterval = session.metadata?.interval || 'monthly';
+                
+                console.log('[WEBHOOK] Plan change detected:', {
+                    from: currentSub?.plan_id || 'free',
+                    to: planId,
+                    isUpgrade,
+                    isDowngrade,
+                    billingInterval
+                });
 
-                if (tokensError) {
-                    console.error('[WEBHOOK] ❌ grant_plan_tokens error:', tokensError);
-                    throw tokensError;
+                if (isUpgrade) {
+                    // UPGRADE: Grant tokens immediately (accumulate)
+                    console.log('[WEBHOOK] 💰 UPGRADE detected - Granting plan tokens (accumulate)');
+                    const { data: tokensResult, error: tokensError } = await supabaseAdmin
+                        .rpc('grant_plan_tokens', {
+                            p_user_id: userId,
+                            p_plan_id: planId,
+                            p_reason: 'plan_upgrade',
+                            p_metadata: {
+                                subscriptionId,
+                                from: 'checkout.session.completed',
+                                previousPlan: currentSub?.plan_id || 'free',
+                                newPlan: planId
+                            }
+                        });
+
+                    if (tokensError) {
+                        console.error('[WEBHOOK] ❌ grant_plan_tokens error:', tokensError);
+                        throw tokensError;
+                    }
+
+                    console.log('[WEBHOOK] ✅ Tokens granted (upgrade), new balance:', tokensResult);
+                    
+                    // Clear any pending downgrade
+                    await supabaseAdmin
+                        .from('user_subscriptions')
+                        .update({
+                            pending_plan_id: null,
+                            pending_effective_date: null,
+                            pending_subscription_id: null,
+                            billing_interval: billingInterval,
+                            last_token_reset_at: new Date().toISOString(),
+                            // For annual plans, next_token_reset_at will be set by the RPC
+                            // or can be calculated in SQL in a separate update if needed
+                            ...(billingInterval === 'monthly' ? {} : { 
+                                // For annual, we'll let the first cron run set it properly
+                                // This avoids JS Date drift
+                            })
+                        })
+                        .eq('user_id', userId);
+                        
+                } else if (isDowngrade) {
+                    // DOWNGRADE: Store as pending, apply at next reset
+                    console.log('[WEBHOOK] ⬇️ DOWNGRADE detected - Storing as pending');
+                    
+                    const nextResetDate = new Date(subscription.current_period_end * 1000);
+                    
+                    await supabaseAdmin
+                        .from('user_subscriptions')
+                        .update({
+                            pending_plan_id: planId,
+                            pending_effective_date: nextResetDate.toISOString(),
+                            pending_subscription_id: subscriptionId,
+                            billing_interval: billingInterval
+                        })
+                        .eq('user_id', userId);
+                    
+                    console.log('[WEBHOOK] ✅ Downgrade stored as pending, will apply on:', nextResetDate.toISOString());
+                    console.log('[WEBHOOK] ⚠️ User keeps current tokens until next billing cycle');
+                    
+                } else {
+                    // SAME PLAN: Just update billing interval
+                    console.log('[WEBHOOK] ℹ️ Same plan level - updating billing interval only');
+                    
+                    await supabaseAdmin
+                        .from('user_subscriptions')
+                        .update({
+                            billing_interval: billingInterval,
+                            last_token_reset_at: new Date().toISOString()
+                        })
+                        .eq('user_id', userId);
                 }
-
-                console.log('[WEBHOOK] ✅ Tokens granted, new balance:', tokensResult);
 
                 break;
             }
@@ -302,37 +384,117 @@ export async function POST(req: Request) {
 
                 console.log('[WEBHOOK] ✅ Dates updated');
 
+                // ============================================================================
                 // RESET tokens on monthly renewal ONLY
+                // ============================================================================
                 if (billingReason === 'subscription_cycle') {
-                    console.log('[WEBHOOK] 🔄 Monthly renewal - RESETTING tokens to plan amount');
+                    console.log('[WEBHOOK] 🔄 Monthly renewal detected - Processing token reset');
 
+                    // CRITICAL: Annual plans should NOT reset here (cron handles monthly resets)
+                    // Only monthly plans reset on invoice.paid
+                    if (userSub.billing_interval === 'annual') {
+                        console.log('[WEBHOOK] ℹ️ Annual plan - token reset handled by cron, skipping webhook reset');
+                        console.log('[WEBHOOK] Updating dates only (no token reset)');
+                        break; // Don't reset tokens for annual plans in webhook
+                    }
+
+                    // ATOMIC IDEMPOTENCY: Process invoice with dedupe table
+                    const invoiceId = normalizeId(invoice.id);
+                    
+                    console.log('[WEBHOOK] Processing monthly renewal for invoice:', invoiceId);
+
+                    // Check if there's a pending downgrade to apply
+                    let effectivePlanId = userSub.plan_id;
+                    let downgradeMeta: Record<string, any> = {};
+                    
+                    if (userSub.pending_plan_id && userSub.pending_effective_date) {
+                        const effectiveDate = new Date(userSub.pending_effective_date);
+                        const now = new Date();
+                        
+                        if (now >= effectiveDate) {
+                            console.log('[WEBHOOK] ⬇️ Applying pending downgrade:', {
+                                from: userSub.plan_id,
+                                to: userSub.pending_plan_id,
+                                effectiveDate: effectiveDate.toISOString()
+                            });
+                            
+                            effectivePlanId = userSub.pending_plan_id;
+                            downgradeMeta = {
+                                downgradedFrom: userSub.plan_id,
+                                downgradedTo: userSub.pending_plan_id
+                            };
+                            
+                            // Update plan_id and clear pending fields
+                            await supabaseAdmin
+                                .from('user_subscriptions')
+                                .update({
+                                    plan_id: effectivePlanId,
+                                    pending_plan_id: null,
+                                    pending_effective_date: null,
+                                    pending_subscription_id: null
+                                })
+                                .eq('user_id', userSub.user_id);
+                                
+                            console.log('[WEBHOOK] ✅ Downgrade applied to DB');
+                        } else {
+                            console.log('[WEBHOOK] ℹ️ Pending downgrade exists but not effective yet:', {
+                                effectiveDate: effectiveDate.toISOString(),
+                                now: now.toISOString()
+                            });
+                        }
+                    }
+
+                    // Get tokens for the effective plan
                     const { data: planData } = await supabaseAdmin
                         .from('subscription_plans')
                         .select('monthly_tokens')
-                        .eq('id', userSub.plan_id)
+                        .eq('id', effectivePlanId)
                         .single();
 
                     if (!planData) {
-                        console.error('[WEBHOOK] ❌ Plan not found:', userSub.plan_id);
-                        throw new Error(`Plan not found: ${userSub.plan_id}`);
+                        console.error('[WEBHOOK] ❌ Plan not found:', effectivePlanId);
+                        throw new Error(`Plan not found: ${effectivePlanId}`);
                     }
 
-                    console.log('[WEBHOOK] Resetting to:', planData.monthly_tokens, 'tokens');
+                    console.log('[WEBHOOK] Resetting to:', planData.monthly_tokens, 'tokens for plan:', effectivePlanId);
 
-                    const { data: tokensResult, error: tokensError } = await supabaseAdmin
-                        .rpc('set_user_tokens', {
+                    // ATOMIC TOKEN RESET with invoice dedupe (prevents concurrent webhook deliveries)
+                    const { data, error: resetError } = await supabaseAdmin
+                        .rpc('process_invoice_token_reset', {
                             p_user_id: userSub.user_id,
-                            p_target_amount: planData.monthly_tokens,
-                            p_reason: 'monthly_reset',
-                            p_metadata: { subscriptionId, planId: userSub.plan_id }
+                            p_invoice_id: invoiceId,
+                            p_plan_id: effectivePlanId,
+                            p_reason: downgradeMeta['downgradedFrom'] ? 'monthly_reset_with_downgrade' : 'monthly_reset',
+                            p_metadata: {
+                                subscriptionId,
+                                planId: effectivePlanId,
+                                ...downgradeMeta
+                            }
                         });
 
-                    if (tokensError) {
-                        console.error('[WEBHOOK] ❌ set_user_tokens error:', tokensError);
-                        throw tokensError;
+                    if (resetError) {
+                        console.error('[WEBHOOK] ❌ process_invoice_token_reset error:', resetError);
+                        throw resetError;
                     }
 
-                    console.log('[WEBHOOK] ✅ Tokens reset to:', tokensResult);
+                    const resetResult = (data as any[])?.[0];
+
+                    if (!resetResult) {
+                        console.error('[WEBHOOK] ❌ No result from process_invoice_token_reset');
+                        throw new Error('No result from process_invoice_token_reset');
+                    }
+
+                    if (resetResult.already_processed) {
+                        console.log('[WEBHOOK] ⏭️ Invoice already processed (concurrent webhook):', invoiceId);
+                        break; // Don't fail, just skip
+                    }
+
+                    if (!resetResult.success) {
+                        console.error('[WEBHOOK] ❌ Token reset failed:', resetResult.error_message);
+                        throw new Error(resetResult.error_message || 'Token reset failed');
+                    }
+
+                    console.log('[WEBHOOK] ✅ Tokens reset to:', resetResult.new_balance);
                 } else {
                     console.log('[WEBHOOK] Not a renewal (billing_reason:', billingReason + '), tokens unchanged');
                 }

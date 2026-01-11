@@ -373,13 +373,29 @@ const Features = ({ market, t }: { market: Market; t: ReturnType<typeof getTrans
 }
 
 const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTranslations> }) => {
-    const [annual, setAnnual] = useState(true)
+    const [annual, setAnnual] = useState(false) // Default to monthly
 
-    // Pricing data by market
-    const pricingData: Record<Market, { starter: number; growth: number; pro: number }> = {
-        us: { starter: 49, growth: 69, pro: 99 },
-        es: { starter: 49, growth: 69, pro: 99 },
-        mx: { starter: 899, growth: 1299, pro: 1799 },
+    // Real pricing data by market (monthly and annual)
+    const pricingData: Record<Market, { 
+        starter: { monthly: number; annual: number };
+        growth: { monthly: number; annual: number };
+        agency: { monthly: number; annual: number };
+    }> = {
+        us: { 
+            starter: { monthly: 45, annual: 450 },
+            growth: { monthly: 99, annual: 990 },
+            agency: { monthly: 249, annual: 2490 }
+        },
+        es: { 
+            starter: { monthly: 39, annual: 390 },
+            growth: { monthly: 99, annual: 990 },
+            agency: { monthly: 229, annual: 2229 }
+        },
+        mx: { 
+            starter: { monthly: 795, annual: 7950 },
+            growth: { monthly: 1995, annual: 19950 },
+            agency: { monthly: 4495, annual: 44950 }
+        },
     }
 
     const prices = pricingData[market]
@@ -411,11 +427,18 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                     {/* Starter */}
                     <div className="border border-gray-200 rounded-2xl p-8 hover:border-indigo-200 transition-colors">
                         <h3 className="text-xl font-bold text-gray-900 mb-4">Starter</h3>
-                        <div className="flex items-baseline mb-6">
-                            <span className="text-4xl font-bold text-gray-900">
-                                {formatCurrency(annual ? prices.starter * 0.7 : prices.starter, market, { showDecimals: false })}
-                            </span>
-                            <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                        <div className="mb-6">
+                            <div className="flex items-baseline">
+                                <span className="text-4xl font-bold text-gray-900">
+                                    {formatCurrency(annual ? prices.starter.annual / 12 : prices.starter.monthly, market, { showDecimals: false })}
+                                </span>
+                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                            </div>
+                            {annual && (
+                                <p className="text-sm text-green-600 mt-1">
+                                    {formatCurrency(prices.starter.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
+                                </p>
+                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-600">
@@ -439,11 +462,18 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                             {t.pricing.mostPopular}
                         </div>
                         <h3 className="text-xl font-bold text-gray-900 mb-4">Growth</h3>
-                        <div className="flex items-baseline mb-6">
-                            <span className="text-4xl font-bold text-gray-900">
-                                {formatCurrency(annual ? prices.growth * 0.7 : prices.growth, market, { showDecimals: false })}
-                            </span>
-                            <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                        <div className="mb-6">
+                            <div className="flex items-baseline">
+                                <span className="text-4xl font-bold text-gray-900">
+                                    {formatCurrency(annual ? prices.growth.annual / 12 : prices.growth.monthly, market, { showDecimals: false })}
+                                </span>
+                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                            </div>
+                            {annual && (
+                                <p className="text-sm text-green-600 mt-1">
+                                    {formatCurrency(prices.growth.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
+                                </p>
+                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-900 font-medium">
@@ -461,14 +491,21 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                         </Link>
                     </div>
 
-                    {/* Pro */}
+                    {/* Agency */}
                     <div className="border border-gray-200 rounded-2xl p-8 hover:border-indigo-200 transition-colors">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Pro</h3>
-                        <div className="flex items-baseline mb-6">
-                            <span className="text-4xl font-bold text-gray-900">
-                                {formatCurrency(annual ? prices.pro * 0.7 : prices.pro, market, { showDecimals: false })}
-                            </span>
-                            <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                        <h3 className="text-xl font-bold text-gray-900 mb-4">Agency</h3>
+                        <div className="mb-6">
+                            <div className="flex items-baseline">
+                                <span className="text-4xl font-bold text-gray-900">
+                                    {formatCurrency(annual ? prices.agency.annual / 12 : prices.agency.monthly, market, { showDecimals: false })}
+                                </span>
+                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
+                            </div>
+                            {annual && (
+                                <p className="text-sm text-green-600 mt-1">
+                                    {formatCurrency(prices.agency.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
+                                </p>
+                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-600">

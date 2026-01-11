@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe, getPriceId, type PlanId } from '@/lib/stripe';
+import { stripe, getPriceId, type PlanId, type BillingInterval } from '@/lib/stripe';
 import { normalizeMarket, type Market, marketFromPath, MARKET_COOKIE_NAME } from '@/lib/market';
 
 /**
  * Simple plan change: Always redirect to Stripe Checkout
  * No upgrades, no downgrades, no schedules, no prorations
  * Just: cancel old sub + create new checkout
- * NOW WITH MULTI-MARKET SUPPORT
+ * NOW WITH MULTI-MARKET SUPPORT AND BILLING INTERVALS
  */
 export async function POST(req: NextRequest) {
     try {
@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { targetPlanId, market: clientMarket } = body;
+        const { targetPlanId, market: clientMarket, interval: clientInterval } = body;
 
-        console.log('[BILLING] Change plan request:', { userId: user.id, targetPlanId, clientMarket });
+        console.log('[BILLING] Change plan request:', { userId: user.id, targetPlanId, clientMarket, clientInterval });
 
         // Determine market from multiple sources with priority
         let market: Market;
@@ -39,7 +39,10 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        console.log('[BILLING] Market detected:', market);
+        // Determine billing interval (default to monthly)
+        const interval: BillingInterval = clientInterval === 'annual' ? 'annual' : 'monthly';
+
+        console.log('[BILLING] Market detected:', market, 'Interval:', interval);
 
         // Get current subscription
         const { data: userSub } = await supabase
@@ -88,9 +91,9 @@ export async function POST(req: NextRequest) {
         // CASE 2: Any paid plan → Cancel old sub + Create Checkout Session
         // ============================================================
         
-        const targetPriceId = getPriceId(market, targetPlanId as PlanId);
+        const targetPriceId = getPriceId(market, targetPlanId as PlanId, interval);
         if (!targetPriceId) {
-            console.error('[BILLING] No price ID configured for market:', market, 'plan:', targetPlanId);
+            console.error('[BILLING] No price ID configured for market:', market, 'plan:', targetPlanId, 'interval:', interval);
             return NextResponse.json({ ok: false, error: 'Price not configured' }, { status: 500 });
         }
 
@@ -117,7 +120,7 @@ export async function POST(req: NextRequest) {
             appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         }
 
-        console.log('[BILLING] Creating checkout for:', targetPlanId, 'market:', market, 'customer:', userSub?.stripe_customer_id);
+        console.log('[BILLING] Creating checkout for:', targetPlanId, 'market:', market, 'interval:', interval, 'customer:', userSub?.stripe_customer_id);
 
         // Create checkout session directly with market-specific price
         const session = await stripe.checkout.sessions.create({
@@ -136,10 +139,11 @@ export async function POST(req: NextRequest) {
                 userId: user.id,
                 planId: targetPlanId,
                 market: market, // Store market for webhook processing
+                interval: interval,
             },
         });
 
-        console.log('[BILLING] Checkout session created:', session.id, 'for market:', market);
+        console.log('[BILLING] Checkout session created:', session.id, 'for market:', market, 'interval:', interval);
         
         return NextResponse.json({
             ok: true,

@@ -162,7 +162,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                 </div>
             </div>
 
-            <PricingModal isOpen={isPricingOpen} onClose={() => setIsPricingOpen(false)} currentPlanId={currentPlanId} />
+            <PricingModal isOpen={isPricingOpen} onClose={() => setIsPricingOpen(false)} />
         </nav>
     )
 }
