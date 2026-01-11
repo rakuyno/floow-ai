@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { niceAlert } from '@/lib/niceAlert'
+import { useTranslations } from '@/lib/hooks/useMarket'
 
 export default function NewSessionPage() {
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function NewSessionPage() {
         .from('ad_sessions')
         .insert({
           user_id: user.id,
-          reference_title: 'Nuevo Anuncio',
+          reference_title: 'New Ad',
         })
         .select()
         .single()
@@ -47,7 +49,7 @@ export default function NewSessionPage() {
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        <p className="mt-4 text-gray-600">Preparando tu nuevo anuncio...</p>
+        <p className="mt-4 text-gray-600">{t.questionnaire.preparing}</p>
       </div>
     </div>
   )

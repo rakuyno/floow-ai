@@ -2,10 +2,19 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import AdActions from './ad-actions'
 import ErrorHintBubble from '@/components/ErrorHintBubble'
+import { cookies } from 'next/headers'
+import { normalizeMarket } from '@/lib/market'
+import { getTranslations } from '@/lib/i18n'
 
 export default async function DashboardPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  
+  // Get market from cookies for translations
+  const cookieStore = cookies()
+  const marketCookie = cookieStore.get('market')
+  const market = normalizeMarket(marketCookie?.value)
+  const t = getTranslations(market)
 
   const search = typeof searchParams.search === 'string' ? searchParams.search.trim() : ''
   const pageParam = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1
@@ -108,7 +117,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
       <div className="md:flex md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
           <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
-            Mis Anuncios
+            {t.dashboard.title}
           </h2>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0">
@@ -116,7 +125,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
             href="/app/new"
             className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
-            Nuevo Anuncio
+            {t.dashboard.newAd}
           </Link>
         </div>
       </div>
@@ -124,7 +133,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
       <div className="mt-4">
         <form className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
           <div className="flex-1 min-w-0">
-            <label className="sr-only" htmlFor="search">Buscar</label>
+            <label className="sr-only" htmlFor="search">{t.common.search}</label>
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -135,7 +144,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                 id="search"
                 name="search"
                 defaultValue={search}
-                placeholder="Buscar por título, TikTok o ID"
+                placeholder={t.dashboard.searchPlaceholder}
                 className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900 placeholder:text-gray-400 bg-white"
               />
             </div>
@@ -145,7 +154,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               type="submit"
               className="inline-flex items-center justify-center rounded-md bg-gray-200 text-gray-800 px-4 py-2 text-sm font-semibold shadow-sm hover:bg-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 shrink-0"
             >
-              Buscar
+              {t.dashboard.searchButton}
             </button>
           </div>
         </form>
@@ -157,7 +166,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
           <div className="block sm:hidden space-y-4">
             {paginated.map((session) => {
               const lastJob = session.render_jobs?.[0]
-              const summary = session.storyboards?.summary || session.reference_title || 'Sin título'
+              const summary = session.storyboards?.summary || session.reference_title || t.dashboard.untitled
               const lastError = lastJob?.error
               const isDraft = !lastJob
               const isDone = lastJob && (lastJob.status === 'done' || lastJob.status === 'completed')
@@ -166,16 +175,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               const jobCost = getJobCost(lastJob?.id, isFailed)
 
               const getFriendlyError = (msg: string | null | undefined): string => {
-                if (!msg) return 'No se pudo generar el video.'
+                if (!msg) return t.errors.videoGenerationFailed
                 const m = msg.toLowerCase()
                 if (m.includes('sensitive') || m.includes('policy') || m.includes('usage') || m.includes('rai')) {
-                  return 'Bloqueado por seguridad. Usa texto e imágenes más neutros.'
+                  return t.errors.blockedSafety
                 }
-                if (m.includes('token')) return 'No hay tokens suficientes.'
+                if (m.includes('token')) return t.errors.insufficientTokens
                 if (m.includes('timeout') || m.includes('unavailable') || m.includes('deadline')) {
-                  return 'El servicio tardó demasiado. Intenta de nuevo.'
+                  return t.errors.serviceTimeout
                 }
-                return 'No se pudo generar el video. Intenta de nuevo.'
+                return t.errors.videoGenerationFailed
               }
 
               const friendlyError = isFailed ? getFriendlyError(lastError) : null
@@ -189,14 +198,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                     <div className="flex items-center gap-2">
                       {isDraft ? (
                       <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                        Borrador
+                        {t.dashboard.draft}
                       </span>
                       ) : (
                         <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${isDone ? 'bg-green-50 text-green-700 ring-green-600/20' :
                           isFailed ? 'bg-red-50 text-red-700 ring-red-600/20' :
                             'bg-yellow-50 text-yellow-700 ring-yellow-600/20'
                           }`}>
-                          {isDone ? 'Generado' : isFailed ? 'Fallido' : 'Procesando'}
+                          {isDone ? t.dashboard.generated : isFailed ? t.dashboard.failed : t.dashboard.processing}
                         </span>
                       )}
                       {isFailed && friendlyError && <ErrorHintBubble message={friendlyError} />}
@@ -204,26 +213,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                   </div>
 
                   <div className="text-xs text-gray-500 mb-4">
-                    Creado: {formatDateTime(session.created_at)}
+                    {t.dashboard.created}: {formatDateTime(session.created_at)}
                   </div>
 
                   <div className="border-t pt-3 flex items-center justify-between">
                     <div className="text-[11px] text-gray-500">
-                      Coste: {jobCost !== null ? `${jobCost} tokens` : '—'}
+                      {t.dashboard.cost}: {jobCost !== null ? `${jobCost} ${t.common.tokens}` : '—'}
                     </div>
                     {isDone && lastJob?.output_url ? (
                       <AdActions outputUrl={lastJob.output_url} hasWatermark={showWatermarkActions} />
                     ) : isProcessing ? (
-                      <span className="text-gray-400 italic text-sm">Procesando...</span>
+                      <span className="text-gray-400 italic text-sm">{t.dashboard.processing}...</span>
                     ) : isDraft ? (
                       <Link href={`/app/session/${session.id}`} className="text-indigo-600 hover:text-indigo-900 font-medium text-sm">
-                        Continuar
+                        {t.dashboard.continueButton}
                       </Link>
                     ) : isFailed ? (
                       <span className="text-gray-400 text-sm">—</span>
                     ) : (
                       <Link href={`/app/session/${session.id}`} className="text-indigo-600 hover:text-indigo-900 font-medium text-sm">
-                        Abrir
+                        {t.dashboard.openButton}
                       </Link>
                     )}
                   </div>
@@ -232,7 +241,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
             })}
             {(paginated.length === 0) && (
               <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-dashed border-gray-300">
-                No tienes anuncios creados. ¡Crea el primero!
+                {t.dashboard.noAds}
               </div>
             )}
           </div>
@@ -245,26 +254,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
-                        Referencia
+                        {t.dashboard.reference}
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                        Estado
+                        {t.dashboard.status}
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                        Creado
+                        {t.dashboard.created}
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                        Coste
+                        {t.dashboard.cost}
                       </th>
                       <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                        <span className="sr-only">Acciones</span>
+                        <span className="sr-only">{t.dashboard.actions}</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {paginated.map((session) => {
                       const lastJob = session.render_jobs?.[0]
-                      const summary = session.storyboards?.summary || session.reference_title || 'Sin título'
+                      const summary = session.storyboards?.summary || session.reference_title || t.dashboard.untitled
                       const lastError = lastJob?.error
                       const isDraft = !lastJob
                       const isDone = lastJob && (lastJob.status === 'done' || lastJob.status === 'completed')
@@ -273,16 +282,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                       const jobCost = getJobCost(lastJob?.id, isFailed)
 
                       const getFriendlyError = (msg: string | null | undefined): string => {
-                        if (!msg) return 'No se pudo generar el video.'
+                        if (!msg) return t.errors.videoGenerationFailed
                         const m = msg.toLowerCase()
                         if (m.includes('sensitive') || m.includes('policy') || m.includes('usage') || m.includes('rai')) {
-                          return 'Bloqueado por seguridad. Usa texto e imágenes más neutros.'
+                          return t.errors.blockedSafety
                         }
-                        if (m.includes('token')) return 'No hay tokens suficientes.'
+                        if (m.includes('token')) return t.errors.insufficientTokens
                         if (m.includes('timeout') || m.includes('unavailable') || m.includes('deadline')) {
-                          return 'El servicio tardó demasiado. Intenta de nuevo.'
+                          return t.errors.serviceTimeout
                         }
-                        return 'No se pudo generar el video. Intenta de nuevo.'
+                        return t.errors.videoGenerationFailed
                       }
 
                       const friendlyError = isFailed ? getFriendlyError(lastError) : null
@@ -294,14 +303,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                             {isDraft ? (
-                              <span className="text-gray-400">Borrador</span>
+                              <span className="text-gray-400">{t.dashboard.draft}</span>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${isDone ? 'bg-green-50 text-green-700 ring-green-600/20' :
                                   isFailed ? 'bg-red-50 text-red-700 ring-red-600/20' :
                                   'bg-yellow-50 text-yellow-700 ring-yellow-600/20'
                                 }`}>
-                                  {isDone ? 'Generado' : isFailed ? 'Fallido' : 'Procesando'}
+                                  {isDone ? t.dashboard.generated : isFailed ? t.dashboard.failed : t.dashboard.processing}
                               </span>
                                 {isFailed && friendlyError && (
                                   <ErrorHintBubble message={friendlyError} />
@@ -313,22 +322,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                             {formatDateTime(session.created_at)}
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
-                            {jobCost !== null ? `${jobCost} tokens` : '—'}
+                            {jobCost !== null ? `${jobCost} ${t.common.tokens}` : '—'}
                           </td>
                           <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             {isDone && lastJob?.output_url ? (
                               <AdActions outputUrl={lastJob.output_url} hasWatermark={showWatermarkActions} />
                             ) : isProcessing ? (
-                              <span className="text-gray-400 italic">Procesando...</span>
+                              <span className="text-gray-400 italic">{t.dashboard.processing}...</span>
                             ) : isDraft ? (
                               <Link href={`/app/session/${session.id}`} className="text-indigo-600 hover:text-indigo-900 font-medium">
-                                Continuar
+                                {t.dashboard.continueButton}
                               </Link>
                             ) : isFailed ? (
                               <span className="text-gray-400">—</span>
                             ) : (
                               <Link href={`/app/session/${session.id}`} className="text-indigo-600 hover:text-indigo-900 font-medium">
-                                Abrir
+                                {t.dashboard.openButton}
                               </Link>
                             )}
                           </td>
@@ -338,7 +347,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                     {(paginated.length === 0) && (
                       <tr>
                         <td colSpan={5} className="text-center py-8 text-gray-500">
-                          No tienes anuncios creados. ¡Crea el primero!
+                          {t.dashboard.noAds}
                         </td>
                       </tr>
                     )}
@@ -352,7 +361,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
         {/* Pagination */}
         <div className="mt-6 flex items-center justify-between text-sm text-gray-700">
           <div>
-            Mostrando {paginated.length > 0 ? `${start + 1}-${Math.min(end, total)}` : '0'} de {total}
+            {t.dashboard.showing} {paginated.length > 0 ? `${start + 1}-${Math.min(end, total)}` : '0'} {t.dashboard.of} {total}
           </div>
           <div className="flex items-center gap-2">
             <Link
@@ -362,10 +371,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               }).toString()}`}
               className={`px-3 py-1 rounded-md border text-sm ${currentPage === 1 ? 'text-gray-400 border-gray-200 pointer-events-none' : 'text-indigo-600 border-gray-300 hover:bg-gray-50'}`}
             >
-              Anterior
+              {t.dashboard.previous}
             </Link>
             <span className="text-gray-600">
-              Página {currentPage} / {totalPages}
+              {t.dashboard.page} {currentPage} / {totalPages}
             </span>
             <Link
               href={`?${new URLSearchParams({
@@ -374,7 +383,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               }).toString()}`}
               className={`px-3 py-1 rounded-md border text-sm ${currentPage === totalPages ? 'text-gray-400 border-gray-200 pointer-events-none' : 'text-indigo-600 border-gray-300 hover:bg-gray-50'}`}
             >
-              Siguiente
+              {t.dashboard.next}
             </Link>
           </div>
         </div>

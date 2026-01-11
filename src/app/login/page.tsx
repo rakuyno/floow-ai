@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
+import { useTranslations } from '@/lib/hooks/useMarket'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,12 +65,12 @@ export default function LoginPage() {
 
             {/* Título */}
             <h2 className="text-4xl lg:text-2xl font-semibold text-gray-900 mb-2 text-center lg:text-start">
-              Inicia sesión en tu cuenta
+              {t.auth.signInTitle}
             </h2>
             <p className="text-gray-600 mb-6 text-center lg:text-start">
-              ¿No tienes cuenta?{' '}
+              {t.auth.noAccount}{' '}
               <Link href="/signup" className="text-blue-500 hover:underline">
-                Créala aquí
+                {t.auth.createHere}
               </Link>
             </p>
 
@@ -85,7 +87,7 @@ export default function LoginPage() {
                 <path fill="#4A90E2" d="M19.834192,20.9995801 C22.0291676,18.9520994 23.4545455,15.903663 23.4545455,12 C23.4545455,11.2909091 23.3454545,10.5818182 23.1818182,9.90909091 L12,9.90909091 L12,14.4545455 L18.4363636,14.4545455 C18.1187732,16.013626 17.2662994,17.2212117 16.0407269,18.0125889 L19.834192,20.9995801 Z"></path>
                 <path fill="#FBBC05" d="M5.27698177,14.2678769 C5.03832634,13.556323 4.90909091,12.7937589 4.90909091,12 C4.90909091,11.2182781 5.03443647,10.4668121 5.26620003,9.76452941 L1.23999023,6.65002441 C0.43658717,8.26043162 0,10.0753848 0,12 C0,13.9195484 0.444780743,15.7301709 1.23746264,17.3349879 L5.27698177,14.2678769 Z"></path>
               </svg>
-              Continuar con Google
+              {t.auth.continueWithGoogle}
             </button>
 
             {/* Separador */}
@@ -94,7 +96,7 @@ export default function LoginPage() {
                 <span className="w-full border-t border-gray-300"></span>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">O CONTINÚA CON EMAIL</span>
+                <span className="px-2 bg-white text-gray-500">{t.auth.orContinueWith}</span>
               </div>
             </div>
 
@@ -104,7 +106,7 @@ export default function LoginPage() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="Dirección de email"
+                  placeholder={t.auth.emailAddress}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -116,7 +118,7 @@ export default function LoginPage() {
                 <input
                   id="password"
                   type="password"
-                  placeholder="Contraseña"
+                  placeholder={t.auth.password}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -132,10 +134,10 @@ export default function LoginPage() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="ml-2 text-sm text-gray-600">Recuérdame</span>
+                  <span className="ml-2 text-sm text-gray-600">{t.auth.rememberMe}</span>
                 </label>
                 <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
-                  ¿Olvidaste tu contraseña?
+                  {t.auth.forgotPassword}
                 </Link>
               </div>
 
@@ -150,18 +152,18 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full p-3 rounded-md border border-gray-300 text-gray-700 font-medium flex items-center justify-center bg-[#F7F8FA] hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
-                {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+                {loading ? t.auth.signingIn : t.auth.signInButton}
               </button>
             </form>
 
             <p className="mt-6 text-xs text-gray-500 text-center">
-              Al continuar, aceptas nuestros{' '}
+              {t.auth.byContinuing}{' '}
               <Link href="/terms" className="text-blue-600 hover:underline">
-                Términos
+                {t.auth.terms}
               </Link>{' '}
               y{' '}
               <Link href="/privacy" className="text-blue-600 hover:underline">
-                Privacidad
+                {t.auth.privacy}
               </Link>
             </p>
           </div>
@@ -179,10 +181,10 @@ export default function LoginPage() {
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-white">
                 <h3 className="text-4xl font-light mb-4 leading-tight">
-                  Crea anuncios UGC con IA en minutos
+                  {t.auth.tagline}
                 </h3>
                 <p className="text-xl text-white/80 font-light">
-                  Genera videos estilo influencer listos para TikTok y Reels
+                  {t.hero.subtitle}
                 </p>
               </div>
             </div>
@@ -190,11 +192,11 @@ export default function LoginPage() {
             {/* Testimonio */}
             <div className="text-left">
               <blockquote className="text-white text-2xl leading-tight font-light mb-4">
-                "AnunciosUGC ha transformado nuestra forma de crear contenido. La velocidad es increíble"
+                {t.auth.testimonial}
               </blockquote>
               <div className="text-white/70 text-lg font-light">
                 <span className="font-normal">María</span>
-                <span className="ml-2">- Directora de Marketing</span>
+                <span className="ml-2">- {t.auth.testimonialAuthor}</span>
               </div>
             </div>
           </div>

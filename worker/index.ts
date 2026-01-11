@@ -421,6 +421,21 @@ async function processJob(job: any) {
 
     const isVoiceoverMode = audioMode === 'voiceover'
     const languageLabel = targetLanguage === 'en' ? 'English' : 'Spanish'
+    
+    // Simple i18n for worker error messages
+    const getErrorMessage = (key: 'content_rejected'): string => {
+      const messages = {
+        en: {
+          content_rejected: 'Content rejected by Floow AI safety filters. Please use more neutral descriptions.'
+        },
+        es: {
+          content_rejected: 'Contenido rechazado por filtros de seguridad de Floow AI. Usa descripciones más neutrales.'
+        }
+      }
+      const lang = targetLanguage === 'en' ? 'en' : 'es'
+      return messages[lang][key]
+    }
+    
     const synthesizeNarration = async (text: string, sceneIndex: number): Promise<string> => {
       if (!voiceProfile) throw new Error('Voice profile not resolved for TTS')
       const safeText = (text || '').trim()
@@ -599,7 +614,7 @@ async function processJob(job: any) {
         withAudio: boolean
       }): Promise<{ buffer: Buffer, debug: SceneAttemptDebug[] }> => {
         const MAX_ATTEMPTS = 5
-        const MAX_POLICY_STRIKES = 3
+        const MAX_POLICY_STRIKES = 1 // Fail fast on sensitive content (was 3)
         let attempt = 0
         let sawImageViolation = false
         let usageGuidelineStrikes = 0
@@ -727,11 +742,15 @@ async function processJob(job: any) {
 
               if (guidelines) {
                 usageGuidelineStrikes += 1
-                const policyMessage = 'Se bloqueó por contenido sensible. Usa texto e imágenes más neutros y vuelve a intentar.'
+                const policyMessage = getErrorMessage('content_rejected')
 
                 if (usageGuidelineStrikes >= MAX_POLICY_STRIKES) {
+                  console.error(`[Scene ${i + 1}] FAIL FAST: Content policy violation detected, stopping retries to free queue`)
                   throw new Error(policyMessage)
                 }
+                // Skip remaining strategies when we hit sensitive content - fail fast
+                console.warn(`[Scene ${i + 1}] Policy violation detected, skipping remaining strategies`)
+                break // Exit strategy loop immediately
               }
 
               retrySameStrategy = false

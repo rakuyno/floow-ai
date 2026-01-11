@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { PLANS } from '@/lib/stripe';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { niceAlert } from '@/lib/niceAlert';
+import { useTranslations } from '@/lib/hooks/useMarket';
 
 interface Plan {
     id: string;
@@ -56,6 +57,7 @@ function BillingContent() {
     const supabase = createClient();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const t = useTranslations();
 
     const fetchData = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -148,11 +150,11 @@ function BillingContent() {
             } else {
                 const text = await response.text();
                 console.error('[Billing] Non-JSON response:', text);
-                throw new Error('Error al cambiar plan. Revisa logs.');
+                throw new Error(t.billing.errorChangingPlan);
             }
 
             if (!response.ok) {
-                throw new Error(result?.error || 'Error al cambiar plan.');
+                throw new Error(result?.error || t.billing.errorChangingPlan);
             }
 
             // If cancel to free
@@ -171,7 +173,7 @@ function BillingContent() {
 
         } catch (error: any) {
             console.error('[Billing] Error changing plan:', error);
-            niceAlert(error.message || 'Error al cambiar plan.');
+            niceAlert(error.message || t.billing.errorChangingPlan);
         } finally {
             setProcessing(false);
         }
@@ -187,7 +189,7 @@ function BillingContent() {
             window.location.href = url;
         } catch (error) {
             console.error(error);
-            niceAlert('No se pudo abrir el portal de facturación.');
+            niceAlert(t.billing.errorOpeningPortal);
             setProcessing(false);
         }
     }
@@ -219,7 +221,7 @@ function BillingContent() {
             <div className="flex items-center justify-center min-h-screen">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Cargando información de facturación...</p>
+                    <p className="mt-4 text-gray-600">{t.billing.loadingInfo}</p>
                 </div>
             </div>
         );
@@ -231,7 +233,7 @@ function BillingContent() {
 
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-8">
-            <h1 className="text-3xl font-bold text-gray-900">Billing & Plans</h1>
+            <h1 className="text-3xl font-bold text-gray-900">{t.billing.title}</h1>
 
             {/* Success Message (post-checkout) */}
             {searchParams.get('success') && (
@@ -239,7 +241,7 @@ function BillingContent() {
                     <div className="flex items-center">
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600 mr-3"></div>
                         <p className="text-sm text-green-800">
-                            ✅ Pago procesado. Actualizando tu plan...
+                            {t.billing.paymentProcessed}
                         </p>
                     </div>
                 </div>
@@ -248,23 +250,23 @@ function BillingContent() {
             {/* Current Status */}
             <div className="bg-white rounded-xl shadow p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                    <h3 className="text-sm font-medium text-gray-500 uppercase">Plan Actual</h3>
+                    <h3 className="text-sm font-medium text-gray-500 uppercase">{t.billing.currentPlan}</h3>
                     <p className="text-2xl font-bold text-indigo-600 mt-1">
                         {plans.find(p => p.id === currentPlanId)?.name || 'Free'}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                        Estado:{' '}
+                        {t.billing.status}:{' '}
                         <span className={`capitalize font-medium ${
                             subscription?.status === 'active' ? 'text-green-600' : 'text-gray-500'
                         }`}>
-                            {subscription?.status || 'Inactivo'}
+                            {subscription?.status === 'active' ? t.billing.active : t.billing.inactive}
                         </span>
                     </p>
                 </div>
                 <div>
-                    <h3 className="text-sm font-medium text-gray-500 uppercase">Saldo de Tokens</h3>
+                    <h3 className="text-sm font-medium text-gray-500 uppercase">{t.billing.tokenBalance}</h3>
                     <p className="text-2xl font-bold text-indigo-600 mt-1">{balance}</p>
-                    <p className="text-sm text-gray-500 mt-1">Disponibles para generar</p>
+                    <p className="text-sm text-gray-500 mt-1">{t.billing.available}</p>
                 </div>
                 <div className="flex flex-col gap-2 justify-center items-end">
                     {/* Botón principal: Cambiar plan */}
@@ -273,7 +275,7 @@ function BillingContent() {
                         disabled={processing}
                         className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors"
                     >
-                        Cambiar plan
+                        {t.billing.changePlan}
                     </button>
                     {/* Botón secundario: Portal (pago/facturas) */}
                     {currentPlanId !== 'free' && (
@@ -282,7 +284,7 @@ function BillingContent() {
                             disabled={processing}
                             className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 underline underline-offset-4 disabled:opacity-50"
                         >
-                            Gestionar método de pago / facturas
+                            {t.billing.managePayment}
                         </button>
                     )}
                 </div>
@@ -294,13 +296,13 @@ function BillingContent() {
                     <div className="bg-white rounded-2xl shadow-xl max-w-6xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <h2 className="text-2xl font-semibold text-gray-900">Cambiar plan</h2>
-                                <p className="text-sm text-gray-600">Selecciona el plan que mejor se adapte.</p>
+                                <h2 className="text-2xl font-semibold text-gray-900">{t.billing.changePlan}</h2>
+                                <p className="text-sm text-gray-600">{t.billing.selectPlan}</p>
                             </div>
                             <button
                                 onClick={() => setShowPlanModal(false)}
                                 className="text-gray-500 hover:text-gray-700"
-                                aria-label="Cerrar"
+                                aria-label={t.common.close}
                             >
                                 ✕
                             </button>
@@ -309,7 +311,7 @@ function BillingContent() {
                         {/* Banner de cambio programado */}
                         {subscription?.pending_plan_id && subscription.pending_plan_id !== 'free' && (
                             <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
-                                Cambio programado para la próxima renovación
+                                {t.billing.scheduledChange}
                             </div>
                         )}
 
@@ -318,8 +320,8 @@ function BillingContent() {
                             {plans.map(plan => {
                                 const isCurrent = plan.id === currentPlanId;
                                 const videoSeconds = tokensToSeconds(plan.monthly_tokens);
-                                let ctaLabel = 'Cambiar';
-                                if (isCurrent) ctaLabel = 'Plan actual';
+                                let ctaLabel = t.billing.changePlan;
+                                if (isCurrent) ctaLabel = t.billing.currentPlanLabel;
 
                                 return (
                                     <div
@@ -332,7 +334,7 @@ function BillingContent() {
                                                 <span className="text-3xl font-bold tracking-tight text-gray-900">
                                                     {plan.monthly_price_cents === 0 ? '€0' : `€${plan.monthly_price_cents / 100}`}
                                                 </span>
-                                                <span className="text-sm font-semibold leading-6 text-gray-600">/mes</span>
+                                                <span className="text-sm font-semibold leading-6 text-gray-600">{t.billing.perMonth}</span>
                                             </p>
                                         </div>
                                         <ul role="list" className="mb-6 space-y-3 text-sm leading-6 text-gray-600 flex-1">
@@ -340,26 +342,26 @@ function BillingContent() {
                                                 <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                                 </svg>
-                                                <span><strong>{plan.monthly_tokens} tokens</strong>/mes</span>
+                                                <span><strong>{plan.monthly_tokens} {t.billing.tokensPerMonth}</strong></span>
                                             </li>
                                             <li className="flex gap-x-3">
                                                 <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                                 </svg>
-                                                <span>≈ {videoSeconds}s de vídeo</span>
+                                                <span>≈ {videoSeconds}s {t.billing.videoSeconds}</span>
                                             </li>
                                             <li className="flex gap-x-3">
                                                 <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                                 </svg>
-                                                <span>{plan.id === 'free' ? 'Con Marca de Agua' : 'Sin Marca de Agua'}</span>
+                                                <span>{plan.id === 'free' ? t.billing.withWatermark : t.billing.noWatermark}</span>
                                             </li>
                                             {plan.id !== 'free' && plan.id !== 'starter' && (
                                                 <li className="flex gap-x-3">
                                                     <svg className="h-5 w-5 text-indigo-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                         <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                                     </svg>
-                                                    <span>Soporte Prioritario</span>
+                                                    <span>{t.billing.prioritySupport}</span>
                                                 </li>
                                             )}
                                         </ul>
@@ -372,7 +374,7 @@ function BillingContent() {
                                                     : 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
                                             }`}
                                         >
-                                            {processing && !isCurrent ? 'Procesando...' : ctaLabel}
+                                            {processing && !isCurrent ? t.billing.processing : ctaLabel}
                                         </button>
                                     </div>
                                 );
@@ -381,10 +383,10 @@ function BillingContent() {
                             {/* Token Purchase Card */}
                             <div className="relative flex flex-col rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-md">
                                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-600 text-xs font-medium text-white">
-                                    🪙 Compra Puntual
+                                    {t.billing.oneTimePurchase}
                                 </div>
                                 <div className="mb-4">
-                                    <h3 className="text-lg font-semibold leading-8 text-gray-900">Tokens Extras</h3>
+                                    <h3 className="text-lg font-semibold leading-8 text-gray-900">{t.billing.extraTokens}</h3>
                                     <p className="mt-2 flex items-baseline gap-x-1">
                                         <span className="text-3xl font-bold tracking-tight text-emerald-700">
                                             €{TOKEN_PACKAGES[tokenSliderIndex].price}
@@ -395,7 +397,7 @@ function BillingContent() {
                                 <div className="mb-6 space-y-4 flex-1">
                                     <div className="bg-white/80 rounded-lg p-3 text-center">
                                         <div className="text-2xl font-bold text-emerald-700">{TOKEN_PACKAGES[tokenSliderIndex].tokens}</div>
-                                        <div className="text-xs text-gray-600">tokens</div>
+                                        <div className="text-xs text-gray-600">{t.common.tokens}</div>
                                     </div>
                                     
                                     {/* Slider */}
@@ -419,19 +421,19 @@ function BillingContent() {
                                             <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                             </svg>
-                                            <span>≈ {TOKEN_PACKAGES[tokenSliderIndex].scenes} escenas</span>
+                                            <span>≈ {TOKEN_PACKAGES[tokenSliderIndex].scenes} {t.billing.scenes}</span>
                                         </li>
                                         <li className="flex gap-x-2">
                                             <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                             </svg>
-                                            <span>Se suman a tu saldo</span>
+                                            <span>{t.billing.addToBalance}</span>
                                         </li>
                                         <li className="flex gap-x-2">
                                             <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                             </svg>
-                                            <span>No caducan</span>
+                                            <span>{t.billing.noExpire}</span>
                                         </li>
                                     </ul>
                                 </div>
@@ -441,7 +443,7 @@ function BillingContent() {
                                     disabled={buyingTokens}
                                     className="mt-auto block w-full rounded-md px-3 py-2 text-center text-sm font-semibold shadow-sm bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-50"
                                 >
-                                    {buyingTokens ? 'Procesando...' : 'Comprar Ahora'}
+                                    {buyingTokens ? t.billing.processing : t.billing.buyNow}
                                 </button>
                             </div>
                         </div>
@@ -452,15 +454,15 @@ function BillingContent() {
             {/* Token History */}
             <div className="bg-white rounded-xl shadow overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200">
-                    <h3 className="text-lg font-medium text-gray-900">Actividad de Tokens</h3>
+                    <h3 className="text-lg font-medium text-gray-900">{t.billing.tokenHistory}</h3>
                 </div>
                 {ledger.length > 0 ? (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Razón</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cambio</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.billing.date}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.billing.reason}</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t.billing.change}</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -481,7 +483,7 @@ function BillingContent() {
                     </table>
                 ) : (
                     <div className="px-6 py-8 text-center text-gray-500">
-                        No hay actividad de tokens todavía
+                        {t.billing.noActivity}
                     </div>
                 )}
             </div>

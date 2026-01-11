@@ -8,6 +8,7 @@ import { Fragment } from 'react'
 import PricingModal from './PricingModal'
 import Logo from './Logo'
 import { createClient } from '@/lib/supabase/client'
+import { useTranslations } from '@/lib/hooks/useMarket'
 
 interface AppHeaderProps {
     userEmail: string
@@ -15,6 +16,7 @@ interface AppHeaderProps {
 
 export default function AppHeader({ userEmail }: AppHeaderProps) {
     const pathname = usePathname()
+    const t = useTranslations()
     const [isPricingOpen, setIsPricingOpen] = useState(false)
     const [currentPlanId, setCurrentPlanId] = useState<string>('free')
     const [tokenBalance, setTokenBalance] = useState<number>(0)
@@ -46,8 +48,8 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
     }, [])
 
     const navigation = [
-        { name: 'Dashboard', href: '/app/dashboard' },
-        { name: 'Crear Anuncio', href: '/app/new' },
+        { name: t.nav.dashboard, href: '/app/dashboard' },
+        { name: t.nav.createAd, href: '/app/new' },
     ]
 
     return (
@@ -92,7 +94,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
                                     <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
                                 </svg>
-                                Mejorar Plan
+                                {t.header.upgradePlan}
                             </button>
                         )}
 
@@ -128,7 +130,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                                                     onClick={() => setIsPricingOpen(true)}
                                                     className={`${active ? 'bg-gray-100' : ''} block w-full px-4 py-2 text-left text-sm text-gray-700 sm:hidden`}
                                                 >
-                                                    ⭐ Mejorar Plan
+                                                    ⭐ {t.header.upgradePlan}
                                                 </button>
                                             )}
                                         </Menu.Item>
@@ -139,7 +141,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                                                 href="/app/billing"
                                                 className={`${active ? 'bg-gray-100' : ''} block w-full px-4 py-2 text-left text-sm text-gray-700`}
                                             >
-                                                Facturación
+                                                {t.header.billing}
                                             </Link>
                                         )}
                                     </Menu.Item>
@@ -150,7 +152,7 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                                                     type="submit"
                                                     className={`${active ? 'bg-gray-100' : ''} block w-full px-4 py-2 text-left text-sm text-gray-700`}
                                                 >
-                                                    Salir
+                                                    {t.header.signOut}
                                                 </button>
                                             </form>
                                         )}

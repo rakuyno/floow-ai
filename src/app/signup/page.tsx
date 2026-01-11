@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
+import { useTranslations } from '@/lib/hooks/useMarket'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -14,12 +15,13 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const t = useTranslations()
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!acceptTerms) {
-      setError('Debes aceptar los términos y condiciones')
+      setError(t.auth.mustAcceptTerms)
       return
     }
 
@@ -72,12 +74,12 @@ export default function SignupPage() {
 
             {/* Título */}
             <h2 className="text-4xl lg:text-2xl font-semibold text-gray-900 mb-2 text-center lg:text-start">
-              Crea una cuenta
+              {t.auth.signUpTitle}
             </h2>
             <p className="text-gray-600 mb-6 text-center lg:text-start">
-              ¿Ya tienes cuenta?{' '}
+              {t.auth.haveAccount}{' '}
               <Link href="/login" className="text-blue-500 hover:underline">
-                Inicia sesión aquí
+                {t.auth.signInHere}
               </Link>
             </p>
 
@@ -94,7 +96,7 @@ export default function SignupPage() {
                 <path fill="#4A90E2" d="M19.834192,20.9995801 C22.0291676,18.9520994 23.4545455,15.903663 23.4545455,12 C23.4545455,11.2909091 23.3454545,10.5818182 23.1818182,9.90909091 L12,9.90909091 L12,14.4545455 L18.4363636,14.4545455 C18.1187732,16.013626 17.2662994,17.2212117 16.0407269,18.0125889 L19.834192,20.9995801 Z"></path>
                 <path fill="#FBBC05" d="M5.27698177,14.2678769 C5.03832634,13.556323 4.90909091,12.7937589 4.90909091,12 C4.90909091,11.2182781 5.03443647,10.4668121 5.26620003,9.76452941 L1.23999023,6.65002441 C0.43658717,8.26043162 0,10.0753848 0,12 C0,13.9195484 0.444780743,15.7301709 1.23746264,17.3349879 L5.27698177,14.2678769 Z"></path>
               </svg>
-              Registrarse con Google
+              {t.auth.registerWithGoogle}
             </button>
 
             {/* Separador */}
@@ -103,7 +105,7 @@ export default function SignupPage() {
                 <span className="w-full border-t border-gray-300"></span>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">O CONTINÚA CON EMAIL</span>
+                <span className="px-2 bg-white text-gray-500">{t.auth.orContinueWith}</span>
               </div>
             </div>
 
@@ -113,7 +115,7 @@ export default function SignupPage() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="Dirección de email"
+                  placeholder={t.auth.emailAddress}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -125,13 +127,13 @@ export default function SignupPage() {
                 <input
                   id="password"
                   type="password"
-                  placeholder="Contraseña"
+                  placeholder={t.auth.password}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                 />
-                <p className="mt-1 text-xs text-gray-500">Mínimo 6 caracteres</p>
+                <p className="mt-1 text-xs text-gray-500">{t.auth.minCharacters}</p>
               </div>
 
               <div className="flex items-start">
@@ -143,13 +145,13 @@ export default function SignupPage() {
                   className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <label htmlFor="terms" className="ml-2 text-sm text-gray-600">
-                  Acepto los{' '}
+                  {t.auth.acceptTerms}{' '}
                   <Link href="/terms" className="text-blue-600 hover:underline">
-                    Términos de Servicio
+                    {t.auth.termsService}
                   </Link>{' '}
                   y la{' '}
                   <Link href="/privacy" className="text-blue-600 hover:underline">
-                    Política de Privacidad
+                    {t.auth.privacyPolicy}
                   </Link>
                 </label>
               </div>
@@ -165,18 +167,18 @@ export default function SignupPage() {
                 disabled={loading}
                 className="w-full p-3 rounded-md border border-gray-300 text-gray-700 font-medium flex items-center justify-center bg-[#F7F8FA] hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
-                {loading ? 'Creando cuenta...' : 'Crear cuenta'}
+                {loading ? t.auth.creatingAccount : t.auth.createAccountButton}
               </button>
             </form>
 
             <p className="mt-6 text-xs text-gray-500 text-center">
-              Al continuar, aceptas nuestros{' '}
+              {t.auth.byContinuing}{' '}
               <Link href="/terms" className="text-blue-600 hover:underline">
-                Términos
+                {t.auth.terms}
               </Link>{' '}
               y{' '}
               <Link href="/privacy" className="text-blue-600 hover:underline">
-                Privacidad
+                {t.auth.privacy}
               </Link>
             </p>
           </div>
@@ -194,10 +196,10 @@ export default function SignupPage() {
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-white">
                 <h3 className="text-4xl font-light mb-4 leading-tight">
-                  Únete a +1,000 marcas creando contenido viral
+                  {t.auth.signupTagline}
                 </h3>
                 <p className="text-xl text-white/80 font-light">
-                  Empieza a crear videos UGC profesionales hoy mismo
+                  {t.hero.subtitle}
                 </p>
               </div>
             </div>
@@ -205,7 +207,7 @@ export default function SignupPage() {
             {/* Testimonio */}
             <div className="text-left">
               <blockquote className="text-white text-2xl leading-tight font-light mb-4">
-                "La mejor herramienta para crear contenido UGC. Ahorramos semanas de producción"
+                {t.auth.signupTestimonial}
               </blockquote>
               <div className="text-white/70 text-lg font-light">
                 <span className="font-normal">Carlos</span>

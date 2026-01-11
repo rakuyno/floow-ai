@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useTranslations } from '@/lib/hooks/useMarket'
 
 export default function TokenCounter({ className = '' }: { className?: string }) {
     const [balance, setBalance] = useState<number | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const supabase = createClient()
+    const t = useTranslations()
 
     useEffect(() => {
         console.log('[TokenCounter] Component mounted, fetching balance...')
@@ -67,7 +69,7 @@ export default function TokenCounter({ className = '' }: { className?: string })
 
             if (userError) {
                 console.error('[TokenCounter] Error getting user:', userError)
-                setError('Error de autenticación')
+                setError(t.errors.authError)
                 return
             }
 
@@ -89,7 +91,7 @@ export default function TokenCounter({ className = '' }: { className?: string })
                 console.error('[TokenCounter] Error code:', balanceError.code)
                 console.error('[TokenCounter] Error message:', balanceError.message)
                 console.error('[TokenCounter] Error details:', balanceError.details)
-                setError('Error al cargar saldo')
+                setError(t.errors.loadBalanceError)
                 return
             }
 
@@ -98,11 +100,11 @@ export default function TokenCounter({ className = '' }: { className?: string })
                 setBalance(data.balance)
             } else {
                 console.warn('[TokenCounter] No balance data found for user')
-                setError('Sin registro de saldo')
+                setError(t.errors.noBalanceRecord)
             }
         } catch (err) {
             console.error('[TokenCounter] Unexpected error:', err)
-            setError('Error inesperado')
+            setError(t.errors.unexpectedError)
         } finally {
             setLoading(false)
         }
@@ -114,7 +116,7 @@ export default function TokenCounter({ className = '' }: { className?: string })
             <div className={`inline-flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm ${className}`}>
                 <span className="text-lg mr-1.5">🪙</span>
                 <span className="font-bold text-gray-400 animate-pulse">...</span>
-                <span className="ml-1 text-xs text-gray-500 font-medium uppercase tracking-wide">Tokens</span>
+                <span className="ml-1 text-xs text-gray-500 font-medium uppercase tracking-wide">{t.common.tokens}</span>
             </div>
         )
     }
@@ -139,7 +141,7 @@ export default function TokenCounter({ className = '' }: { className?: string })
         <div className={`inline-flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm ${className}`}>
             <span className="text-lg mr-1.5">🪙</span>
             <span className="font-bold text-gray-900">{balance}</span>
-            <span className="ml-1 text-xs text-gray-500 font-medium uppercase tracking-wide">Tokens</span>
+            <span className="ml-1 text-xs text-gray-500 font-medium uppercase tracking-wide">{t.common.tokens}</span>
         </div>
     )
 }

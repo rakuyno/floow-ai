@@ -455,8 +455,9 @@ export async function generateVeoVideoClip(options: {
 
                 // Safety check
                 if (res.data.response.raiMediaFilteredCount > 0) {
-                    console.error('[Veo] Blocked by safety filter')
-                    throw new Error('Video blocked by safety policy')
+                    console.error('[Veo] Blocked by safety filter (raiMediaFilteredCount > 0)')
+                    const raiReason = res.data.response.raiMediaFilteredReasons?.[0] || 'policy violation'
+                    throw new Error(`Content blocked by Floow AI safety filters: ${raiReason}`)
                 }
 
                 if (video.gcsUri) {
