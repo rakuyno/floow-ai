@@ -217,7 +217,7 @@ export default function PricingModal({ isOpen, onClose }: PricingModalProps) {
                                                 <div className="mt-2">
                                                     <div className="flex items-baseline gap-x-1">
                                                         <span className="text-3xl font-bold text-gray-900">
-                                                            {formatCurrency(isAnnual ? plan.price / 12 : plan.price, market, { showDecimals: false })}
+                                                            {formatCurrency(isAnnual ? plan.price / 12 : plan.price, market, { showDecimals: isAnnual })}
                                                         </span>
                                                         <span className="text-sm text-gray-600">{t.perMonth}</span>
                                                     </div>

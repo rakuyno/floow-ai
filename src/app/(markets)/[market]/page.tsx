@@ -487,25 +487,20 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                         <div className="mb-6">
                             <div className="flex items-baseline">
                                 <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.starter.annual / 12 : prices.starter.monthly, market, { showDecimals: false })}
+                                    {formatCurrency(annual ? prices.starter.annual / 12 : prices.starter.monthly, market, { showDecimals: annual })}
                                 </span>
                                 <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
                             </div>
-                            {annual && (
-                                <p className="text-sm text-green-600 mt-1">
-                                    {formatCurrency(prices.starter.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
-                                </p>
-                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-600">
                                 <Check size={18} className="text-indigo-600" /> 550 {t.pricing.credits}
                             </li>
                             <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 27 {t.pricing.videos}
+                                <Check size={18} className="text-indigo-600" /> ≈ 27 {t.pricing.videos}
                             </li>
                             <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 550 {t.pricing.images}
+                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
                             </li>
                         </ul>
                         <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-white border-2 border-gray-900 text-gray-900 rounded-xl font-bold text-center hover:bg-gray-50 transition-colors">
@@ -522,25 +517,23 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                         <div className="mb-6">
                             <div className="flex items-baseline">
                                 <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.growth.annual / 12 : prices.growth.monthly, market, { showDecimals: false })}
+                                    {formatCurrency(annual ? prices.growth.annual / 12 : prices.growth.monthly, market, { showDecimals: annual })}
                                 </span>
                                 <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
                             </div>
-                            {annual && (
-                                <p className="text-sm text-green-600 mt-1">
-                                    {formatCurrency(prices.growth.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
-                                </p>
-                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-900 font-medium">
                                 <Check size={18} className="text-indigo-600" /> 1200 {t.pricing.credits}
                             </li>
                             <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> 60 {t.pricing.videos}
+                                <Check size={18} className="text-indigo-600" /> ≈ 60 {t.pricing.videos}
                             </li>
                             <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> 1200 {t.pricing.images}
+                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-900 font-medium">
+                                <Check size={18} className="text-indigo-600" /> {t.pricing.prioritySupport}
                             </li>
                         </ul>
                         <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold text-center hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-xl">
@@ -554,25 +547,23 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                         <div className="mb-6">
                             <div className="flex items-baseline">
                                 <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.agency.annual / 12 : prices.agency.monthly, market, { showDecimals: false })}
+                                    {formatCurrency(annual ? prices.agency.annual / 12 : prices.agency.monthly, market, { showDecimals: annual })}
                                 </span>
                                 <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
                             </div>
-                            {annual && (
-                                <p className="text-sm text-green-600 mt-1">
-                                    {formatCurrency(prices.agency.annual, market, { showDecimals: false })} {market === 'us' ? 'billed annually' : 'facturado anualmente'}
-                                </p>
-                            )}
                         </div>
                         <ul className="space-y-4 mb-8">
                             <li className="flex items-center gap-3 text-gray-600">
                                 <Check size={18} className="text-indigo-600" /> 2500 {t.pricing.credits}
                             </li>
                             <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 125 {t.pricing.videos}
+                                <Check size={18} className="text-indigo-600" /> ≈ 125 {t.pricing.videos}
                             </li>
                             <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 2500 {t.pricing.images}
+                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
+                            </li>
+                            <li className="flex items-center gap-3 text-gray-600">
+                                <Check size={18} className="text-indigo-600" /> {t.pricing.prioritySupport}
                             </li>
                         </ul>
                         <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-white border-2 border-gray-900 text-gray-900 rounded-xl font-bold text-center hover:bg-gray-50 transition-colors">
