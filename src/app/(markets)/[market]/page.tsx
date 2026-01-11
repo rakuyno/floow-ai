@@ -15,30 +15,86 @@ import {
     Box,
     Video,
     Zap,
-    Star
+    Star,
+    ChevronDown
 } from 'lucide-react'
 import Logo from '@/components/Logo'
 import { Market } from '@/lib/market'
 import { getTranslations, formatCurrency } from '@/lib/i18n'
+import { ProductSchema, OrganizationSchema, WebsiteSchema, FAQSchema } from '@/components/StructuredData'
 
 export default function MarketHome() {
     const params = useParams()
     const market = (params?.market as Market) || 'us'
     const t = getTranslations(market)
     
+    // FAQ data for SEO
+    const faqs = market === 'us' ? [
+        {
+            question: "What is Floow AI?",
+            answer: "Floow AI is an AI-powered platform that generates influencer-style UGC (User Generated Content) videos for your products. Our AI avatars hold and present your products in professional videos perfect for TikTok, Instagram, and other social media platforms."
+        },
+        {
+            question: "How long does it take to create a video?",
+            answer: "Most videos are generated in 2-5 minutes. Simply upload your product images, describe your product, choose an AI avatar, and our system will create a professional UGC-style video ready to use in your marketing campaigns."
+        },
+        {
+            question: "What makes Floow AI different from traditional UGC?",
+            answer: "Traditional UGC requires finding influencers, negotiating rates, shipping products, and waiting weeks for content. Floow AI creates similar quality videos in minutes at a fraction of the cost, with full control over messaging and unlimited revisions."
+        },
+        {
+            question: "Can I use these videos for paid ads on TikTok and Facebook?",
+            answer: "Yes! Our videos are designed to look authentic and perform well in paid advertising campaigns on TikTok, Facebook, Instagram, and other social platforms. Many customers use them successfully for their ad campaigns."
+        },
+        {
+            question: "Do I need any video editing skills?",
+            answer: "No! Our platform is designed to be user-friendly. Just answer a few questions about your product, upload images, and our AI handles all the complex video generation, scripting, and editing automatically."
+        }
+    ] : [
+        {
+            question: "¿Qué es Floow AI?",
+            answer: "Floow AI es una plataforma que utiliza IA para generar videos UGC (contenido generado por usuarios) estilo influencer para tus productos. Nuestros avatares de IA sostienen y presentan tus productos en videos profesionales perfectos para TikTok, Instagram y otras redes sociales."
+        },
+        {
+            question: "¿Cuánto tiempo tarda en crearse un video?",
+            answer: "La mayoría de videos se generan en 2-5 minutos. Simplemente sube imágenes de tu producto, descríbelo, elige un avatar IA, y nuestro sistema creará un video profesional estilo UGC listo para usar en tus campañas de marketing."
+        },
+        {
+            question: "¿Qué diferencia a Floow AI del UGC tradicional?",
+            answer: "El UGC tradicional requiere encontrar influencers, negociar tarifas, enviar productos y esperar semanas por el contenido. Floow AI crea videos de calidad similar en minutos a una fracción del coste, con control total sobre el mensaje y revisiones ilimitadas."
+        },
+        {
+            question: "¿Puedo usar estos videos para anuncios pagados en TikTok y Facebook?",
+            answer: "¡Sí! Nuestros videos están diseñados para verse auténticos y funcionar bien en campañas publicitarias pagadas en TikTok, Facebook, Instagram y otras plataformas. Muchos clientes los usan exitosamente en sus campañas de ads."
+        },
+        {
+            question: "¿Necesito conocimientos de edición de video?",
+            answer: "¡No! Nuestra plataforma está diseñada para ser fácil de usar. Solo responde algunas preguntas sobre tu producto, sube imágenes, y nuestra IA se encarga automáticamente de toda la generación, guión y edición del video."
+        }
+    ];
+    
     return (
-        <main className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900">
-            <Navbar market={market} t={t} />
-            <Hero market={market} t={t} />
-            <VideoCarousel />
-            <SocialProof market={market} t={t} />
-            <Steps market={market} t={t} />
-            <ProductHolding market={market} t={t} />
-            <Features market={market} t={t} />
-            <Pricing market={market} t={t} />
-            <CTA market={market} t={t} />
-            <Footer market={market} t={t} />
-        </main>
+        <>
+            {/* Structured Data for SEO */}
+            <ProductSchema />
+            <OrganizationSchema />
+            <WebsiteSchema />
+            <FAQSchema faqs={faqs} />
+            
+            <main className="min-h-screen bg-white selection:bg-indigo-100 selection:text-indigo-900">
+                <Navbar market={market} t={t} />
+                <Hero market={market} t={t} />
+                <VideoCarousel />
+                <SocialProof market={market} t={t} />
+                <Steps market={market} t={t} />
+                <ProductHolding market={market} t={t} />
+                <Features market={market} t={t} />
+                <Pricing market={market} t={t} />
+                <FAQ market={market} faqs={faqs} />
+                <CTA market={market} t={t} />
+                <Footer market={market} t={t} />
+            </main>
+        </>
     )
 }
 
@@ -147,8 +203,9 @@ const VideoCarousel = () => {
                     <div key={i} className="flex-none w-[200px] md:w-[280px] aspect-[9/16] bg-white rounded-xl shadow-md overflow-hidden relative group cursor-pointer hover:-translate-y-2 transition-transform duration-300">
                         <img
                             src={url}
-                            alt={`Video preview ${i + 1}`}
+                            alt={`AI-generated UGC video example ${(i % videoUrls.length) + 1} - Product video with AI avatar`}
                             className="w-full h-full object-cover"
+                            loading="lazy"
                         />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                             <Play className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" size={48} />
@@ -522,6 +579,70 @@ const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTransl
                             {t.pricing.tryFreeTrial}
                         </Link>
                     </div>
+                </div>
+            </div>
+        </section>
+    )
+}
+
+const FAQ = ({ market, faqs }: { market: Market; faqs: Array<{ question: string; answer: string }> }) => {
+    const [openIndex, setOpenIndex] = useState<number | null>(null)
+
+    return (
+        <section className="py-20 bg-white" id="faq">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                        {market === 'us' ? 'Frequently Asked Questions' : 'Preguntas Frecuentes'}
+                    </h2>
+                    <p className="text-lg text-gray-600">
+                        {market === 'us' 
+                            ? 'Everything you need to know about Floow AI'
+                            : 'Todo lo que necesitas saber sobre Floow AI'
+                        }
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    {faqs.map((faq, index) => (
+                        <div 
+                            key={index} 
+                            className="border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 transition-colors"
+                        >
+                            <button
+                                onClick={() => setOpenIndex(openIndex === index ? null : index)}
+                                className="w-full flex items-center justify-between p-6 text-left bg-white hover:bg-gray-50 transition-colors"
+                            >
+                                <h3 className="text-lg font-semibold text-gray-900 pr-8">
+                                    {faq.question}
+                                </h3>
+                                <ChevronDown 
+                                    className={`flex-shrink-0 text-gray-500 transition-transform duration-200 ${
+                                        openIndex === index ? 'rotate-180' : ''
+                                    }`}
+                                    size={20}
+                                />
+                            </button>
+                            {openIndex === index && (
+                                <div className="px-6 pb-6 text-gray-600 leading-relaxed">
+                                    {faq.answer}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-12 text-center">
+                    <p className="text-gray-600 mb-4">
+                        {market === 'us' ? 'Still have questions?' : '¿Aún tienes preguntas?'}
+                    </p>
+                    <Link 
+                        href={`/${market}/signup`}
+                        className="inline-flex items-center text-indigo-600 font-semibold hover:text-indigo-700"
+                    >
+                        {market === 'us' ? 'Try it free' : 'Pruébalo gratis'}
+                        <ArrowRight size={16} className="ml-2" />
+                    </Link>
                 </div>
             </div>
         </section>

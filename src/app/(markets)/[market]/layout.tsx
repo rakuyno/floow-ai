@@ -31,32 +31,71 @@ export async function generateMetadata({
     
     if (!VALID_MARKETS.includes(market)) {
         return {
-            title: 'AnunciosUGC',
+            title: 'Floow AI',
         };
     }
     
     const config = MARKET_CONFIG[market];
+    const baseUrl = 'https://floow.ai';
     
-    // Localized titles
-    const titles: Record<Market, string> = {
-        us: 'AnunciosUGC - Create AI UGC Videos',
-        es: 'AnunciosUGC - Crea Videos UGC con IA',
-        mx: 'AnunciosUGC - Crea Videos UGC con IA',
+    const seoData: Record<Market, {
+        title: string;
+        description: string;
+        keywords: string[];
+    }> = {
+        us: {
+            title: 'Floow AI - Create AI UGC Videos | Product Video Generator',
+            description: 'Generate professional UGC ads with AI avatars. Create influencer-style product videos in minutes. Perfect for e-commerce, TikTok, and digital marketing.',
+            keywords: ['AI video generator', 'UGC ads', 'product videos', 'AI avatars', 'influencer marketing', 'TikTok ads', 'e-commerce videos', 'video marketing'],
+        },
+        es: {
+            title: 'Floow AI - Crea Videos UGC con IA | Generador de Videos de Producto',
+            description: 'Genera anuncios UGC profesionales con avatares IA. Crea videos estilo influencer para tus productos en minutos. Perfecto para e-commerce, TikTok y marketing digital.',
+            keywords: ['generador videos IA', 'anuncios UGC', 'videos producto', 'avatares IA', 'marketing influencer', 'anuncios TikTok', 'videos ecommerce', 'marketing video'],
+        },
+        mx: {
+            title: 'Floow AI - Crea Videos UGC con IA | Generador de Videos de Producto',
+            description: 'Genera anuncios UGC profesionales con avatares IA. Crea videos estilo influencer para tus productos en minutos. Perfecto para e-commerce, TikTok y marketing digital.',
+            keywords: ['generador videos IA', 'anuncios UGC', 'videos producto', 'avatares IA', 'marketing influencer', 'anuncios TikTok', 'videos ecommerce', 'marketing video'],
+        },
     };
     
-    const descriptions: Record<Market, string> = {
-        us: 'Generate influencer-style videos where AI avatars hold and talk about your products.',
-        es: 'Genera videos estilo influencer donde avatares IA sostienen y hablan de tus productos.',
-        mx: 'Genera videos estilo influencer donde avatares IA sostienen y hablan de tus productos.',
-    };
+    const data = seoData[market];
+    const ogImage = `${baseUrl}/og-image-${market}.png`;
     
     return {
-        title: titles[market],
-        description: descriptions[market],
+        title: data.title,
+        description: data.description,
+        keywords: data.keywords,
         openGraph: {
-            title: titles[market],
-            description: descriptions[market],
+            title: data.title,
+            description: data.description,
+            url: `${baseUrl}/${market}`,
+            siteName: 'Floow AI',
             locale: config.locale,
+            type: 'website',
+            images: [
+                {
+                    url: ogImage,
+                    width: 1200,
+                    height: 630,
+                    alt: data.title,
+                },
+            ],
+        },
+        twitter: {
+            card: 'summary_large_image',
+            title: data.title,
+            description: data.description,
+            images: [ogImage],
+        },
+        alternates: {
+            canonical: `${baseUrl}/${market}`,
+            languages: {
+                'en-US': `${baseUrl}/us`,
+                'es-ES': `${baseUrl}/es`,
+                'es-MX': `${baseUrl}/mx`,
+            },
         },
     };
 }
