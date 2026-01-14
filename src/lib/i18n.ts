@@ -70,6 +70,8 @@ export interface Translations {
         submit: string;
         tokens: string;
         scenes: string;
+        english: string;
+        spanish: string;
     };
     
     // Features
@@ -361,6 +363,8 @@ const EN_TRANSLATIONS: Translations = {
         submit: 'Submit',
         tokens: 'tokens',
         scenes: 'scenes',
+        english: 'English',
+        spanish: 'Spanish',
     },
     features: {
         title: 'Create winning creatives with these features',
@@ -634,6 +638,8 @@ const ES_ES_TRANSLATIONS: Translations = {
         submit: 'Enviar',
         tokens: 'tokens',
         scenes: 'escenas',
+        english: 'Inglés',
+        spanish: 'Español',
     },
     features: {
         title: 'Crea creativos ganadores con estas funciones',
@@ -907,6 +913,8 @@ const ES_MX_TRANSLATIONS: Translations = {
         submit: 'Enviar',
         tokens: 'tokens',
         scenes: 'escenas',
+        english: 'Inglés',
+        spanish: 'Español',
     },
     features: {
         title: 'Crea creativos ganadores con estas funciones',
