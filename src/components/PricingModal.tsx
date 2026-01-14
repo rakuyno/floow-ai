@@ -25,7 +25,7 @@ const PRICING_DATA: Record<Market, {
     es: {
         starter: { monthly: 39, annual: 390 },
         growth: { monthly: 99, annual: 990 },
-        agency: { monthly: 229, annual: 2229 }
+        agency: { monthly: 229, annual: 2290 }
     },
     mx: {
         starter: { monthly: 795, annual: 7950 },

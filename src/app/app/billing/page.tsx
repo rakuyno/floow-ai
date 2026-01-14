@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { niceAlert } from '@/lib/niceAlert';
 import { useTranslations, useMarket } from '@/lib/hooks/useMarket';
 import { formatCurrency } from '@/lib/i18n';
+import { Market } from '@/lib/market';
 
 interface Plan {
     id: string;
@@ -31,15 +32,33 @@ interface LedgerEntry {
     created_at: string;
 }
 
-// Token packages for slider
-const TOKEN_PACKAGES = [
-    { tokens: 100, price: 15, scenes: 10 },
-    { tokens: 300, price: 39, scenes: 30 },
-    { tokens: 600, price: 69, scenes: 60 },
-    { tokens: 1200, price: 129, scenes: 120 },
-    { tokens: 3000, price: 299, scenes: 300 },
-    { tokens: 6000, price: 549, scenes: 600 },
-];
+// Token packages for slider by market
+const TOKEN_PACKAGES: Record<Market, Array<{ tokens: number; price: number; scenes: number }>> = {
+    us: [
+        { tokens: 100, price: 22, scenes: 10 },
+        { tokens: 300, price: 59, scenes: 30 },
+        { tokens: 600, price: 109, scenes: 60 },
+        { tokens: 1200, price: 189, scenes: 120 },
+        { tokens: 3000, price: 399, scenes: 300 },
+        { tokens: 6000, price: 749, scenes: 600 },
+    ],
+    es: [
+        { tokens: 100, price: 20, scenes: 10 },
+        { tokens: 300, price: 49, scenes: 30 },
+        { tokens: 600, price: 89, scenes: 60 },
+        { tokens: 1200, price: 159, scenes: 120 },
+        { tokens: 3000, price: 349, scenes: 300 },
+        { tokens: 6000, price: 649, scenes: 600 },
+    ],
+    mx: [
+        { tokens: 100, price: 395, scenes: 10 },
+        { tokens: 300, price: 995, scenes: 30 },
+        { tokens: 600, price: 1795, scenes: 60 },
+        { tokens: 1200, price: 3195, scenes: 120 },
+        { tokens: 3000, price: 6995, scenes: 300 },
+        { tokens: 6000, price: 12995, scenes: 600 },
+    ],
+};
 
 // Helper: Calculate video seconds from tokens (10 tokens = 4 seconds)
 const tokensToSeconds = (tokens: number) => Math.floor((tokens * 4) / 10);
@@ -217,7 +236,7 @@ function BillingContent() {
     async function handleBuyTokens() {
         setBuyingTokens(true);
         try {
-            const selectedPackage = TOKEN_PACKAGES[tokenSliderIndex];
+            const selectedPackage = TOKEN_PACKAGES[market][tokenSliderIndex];
             const response = await fetch('/api/billing/buy-tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -411,14 +430,14 @@ function BillingContent() {
                                     <h3 className="text-lg font-semibold leading-8 text-gray-900">{t.billing.extraTokens}</h3>
                                     <p className="mt-2 flex items-baseline gap-x-1">
                                         <span className="text-3xl font-bold tracking-tight text-emerald-700">
-                                            {formatCurrency(TOKEN_PACKAGES[tokenSliderIndex].price, market, { showDecimals: false })}
+                                            {formatCurrency(TOKEN_PACKAGES[market][tokenSliderIndex].price, market, { showDecimals: false })}
                                         </span>
                                     </p>
                                 </div>
                                 
                                 <div className="mb-6 space-y-4 flex-1">
                                     <div className="bg-white/80 rounded-lg p-3 text-center">
-                                        <div className="text-2xl font-bold text-emerald-700">{TOKEN_PACKAGES[tokenSliderIndex].tokens}</div>
+                                        <div className="text-2xl font-bold text-emerald-700">{TOKEN_PACKAGES[market][tokenSliderIndex].tokens}</div>
                                         <div className="text-xs text-gray-600">{t.common.tokens}</div>
                                     </div>
                                     
@@ -427,7 +446,7 @@ function BillingContent() {
                                         <input
                                             type="range"
                                             min="0"
-                                            max={TOKEN_PACKAGES.length - 1}
+                                            max={TOKEN_PACKAGES[market].length - 1}
                                             value={tokenSliderIndex}
                                             onChange={(e) => setTokenSliderIndex(parseInt(e.target.value))}
                                             className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
@@ -443,7 +462,7 @@ function BillingContent() {
                                             <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                             </svg>
-                                            <span>≈ {TOKEN_PACKAGES[tokenSliderIndex].scenes} {t.billing.scenes}</span>
+                                            <span>≈ {TOKEN_PACKAGES[market][tokenSliderIndex].scenes} {t.billing.scenes}</span>
                                         </li>
                                         <li className="flex gap-x-2">
                                             <svg className="h-4 w-4 text-emerald-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
