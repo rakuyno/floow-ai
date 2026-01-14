@@ -7,7 +7,7 @@ import { PLANS } from '@/lib/stripe';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { niceAlert } from '@/lib/niceAlert';
 import { useTranslations, useMarket } from '@/lib/hooks/useMarket';
-import { formatCurrency } from '@/lib/market';
+import { formatCurrency } from '@/lib/i18n';
 
 interface Plan {
     id: string;

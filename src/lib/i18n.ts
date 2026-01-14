@@ -138,6 +138,11 @@ export interface Translations {
         insufficientTokens: string;
         serviceTimeout: string;
         videoGenerationFailed: string;
+        reasonDetected: string;
+        authError: string;
+        loadBalanceError: string;
+        noBalanceRecord: string;
+        unexpectedError: string;
     };
 
     // Auth (Login/Signup)
@@ -421,6 +426,11 @@ const EN_TRANSLATIONS: Translations = {
         insufficientTokens: 'Insufficient tokens.',
         serviceTimeout: 'Service took too long. Try again.',
         videoGenerationFailed: 'Could not generate video. Try again.',
+        reasonDetected: 'Reason Detected',
+        authError: 'Authentication error',
+        loadBalanceError: 'Error loading balance',
+        noBalanceRecord: 'No balance record',
+        unexpectedError: 'Unexpected error',
     },
     auth: {
         signInTitle: 'Sign in to your account',
@@ -696,6 +706,11 @@ const ES_ES_TRANSLATIONS: Translations = {
         insufficientTokens: 'No hay tokens suficientes.',
         serviceTimeout: 'El servicio tardó demasiado. Intenta de nuevo.',
         videoGenerationFailed: 'No se pudo generar el vídeo. Intenta de nuevo.',
+        reasonDetected: 'Motivo Detectado',
+        authError: 'Error de autenticación',
+        loadBalanceError: 'Error al cargar saldo',
+        noBalanceRecord: 'Sin registro de saldo',
+        unexpectedError: 'Error inesperado',
     },
     auth: {
         signInTitle: 'Inicia sesión en tu cuenta',
@@ -971,6 +986,11 @@ const ES_MX_TRANSLATIONS: Translations = {
         insufficientTokens: 'No hay tokens suficientes.',
         serviceTimeout: 'El servicio tardó demasiado. Intenta de nuevo.',
         videoGenerationFailed: 'No se pudo generar el video. Intenta de nuevo.',
+        reasonDetected: 'Motivo Detectado',
+        authError: 'Error de autenticación',
+        loadBalanceError: 'Error al cargar saldo',
+        noBalanceRecord: 'Sin registro de saldo',
+        unexpectedError: 'Error inesperado',
     },
     auth: {
         signInTitle: 'Inicia sesión en tu cuenta',
