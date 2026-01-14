@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { PLANS } from '@/lib/stripe';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { niceAlert } from '@/lib/niceAlert';
-import { useTranslations } from '@/lib/hooks/useMarket';
+import { useTranslations, useMarket } from '@/lib/hooks/useMarket';
+import { formatCurrency } from '@/lib/market';
 
 interface Plan {
     id: string;
@@ -58,6 +59,7 @@ function BillingContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const t = useTranslations();
+    const market = useMarket();
 
     const fetchData = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -136,10 +138,15 @@ function BillingContent() {
         setProcessing(true);
 
         try {
+            console.log('[Billing] Changing plan to:', targetPlanId, 'market:', market);
             const response = await fetch('/api/billing/change-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetPlanId })
+                body: JSON.stringify({ 
+                    targetPlanId, 
+                    market,
+                    interval: 'monthly' // Default to monthly for now
+                })
             });
 
             const contentType = response.headers.get('content-type');
@@ -202,7 +209,10 @@ function BillingContent() {
             const response = await fetch('/api/billing/buy-tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokenAmount: selectedPackage.tokens })
+                body: JSON.stringify({ 
+                    tokenAmount: selectedPackage.tokens,
+                    market 
+                })
             });
 
             if (!response.ok) throw new Error('Failed to create checkout session');
@@ -332,7 +342,7 @@ function BillingContent() {
                                             <h3 className="text-lg font-semibold leading-8 text-gray-900">{plan.name}</h3>
                                             <p className="mt-2 flex items-baseline gap-x-1">
                                                 <span className="text-3xl font-bold tracking-tight text-gray-900">
-                                                    {plan.monthly_price_cents === 0 ? '€0' : `€${plan.monthly_price_cents / 100}`}
+                                                    {formatCurrency(plan.monthly_price_cents / 100, market, { showDecimals: false })}
                                                 </span>
                                                 <span className="text-sm font-semibold leading-6 text-gray-600">{t.billing.perMonth}</span>
                                             </p>
@@ -389,7 +399,7 @@ function BillingContent() {
                                     <h3 className="text-lg font-semibold leading-8 text-gray-900">{t.billing.extraTokens}</h3>
                                     <p className="mt-2 flex items-baseline gap-x-1">
                                         <span className="text-3xl font-bold tracking-tight text-emerald-700">
-                                            €{TOKEN_PACKAGES[tokenSliderIndex].price}
+                                            {formatCurrency(TOKEN_PACKAGES[tokenSliderIndex].price, market, { showDecimals: false })}
                                         </span>
                                     </p>
                                 </div>

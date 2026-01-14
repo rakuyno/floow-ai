@@ -93,9 +93,15 @@ export async function POST(req: NextRequest) {
         
         const targetPriceId = getPriceId(market, targetPlanId as PlanId, interval);
         if (!targetPriceId) {
-            console.error('[BILLING] No price ID configured for market:', market, 'plan:', targetPlanId, 'interval:', interval);
-            return NextResponse.json({ ok: false, error: 'Price not configured' }, { status: 500 });
+            console.error('[BILLING] ❌ No price ID configured for market:', market, 'plan:', targetPlanId, 'interval:', interval);
+            const envVar = `STRIPE_PRICE_${targetPlanId.toUpperCase()}_${market.toUpperCase()}_${interval.toUpperCase()}`;
+            return NextResponse.json({ 
+                ok: false, 
+                error: `Price not configured. Missing env: ${envVar}` 
+            }, { status: 500 });
         }
+
+        console.log('[BILLING] ✅ Found price ID:', targetPriceId);
 
         // IMPORTANT: Cancel old subscription FIRST if exists
         if (userSub?.stripe_subscription_id) {
