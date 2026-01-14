@@ -34,7 +34,7 @@ export default function QuestionnairePage() {
     avatar_id: string | null
     avatar_name: string | null
     num_scenes: number
-    target_language: 'en' | 'es'
+    target_language: 'en-US' | 'es-ES' | 'es-MX'
   }>({
     product_name: '',
     target_users: '',
@@ -47,7 +47,7 @@ export default function QuestionnairePage() {
     avatar_id: null,
     avatar_name: null,
     num_scenes: 3, // Default to 3 scenes (30 tokens for free users)
-    target_language: 'es' // Default to Spanish
+    target_language: 'es-MX' // Default to Spanish Mexico
   })
 
   useEffect(() => {
@@ -509,36 +509,49 @@ export default function QuestionnairePage() {
                 </div>
               </div>
 
-              {/* Language selector (EN / ES) */}
+              {/* Language selector with accents (EN-US / ES-ES / ES-MX) */}
               <div className="pt-4 border-t">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   {t.questionnaire.targetLanguage} <span className="text-red-500">*</span>
                 </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
                 <input
                   type="radio"
                   name="target_language"
-                  value="en"
-                  checked={formData.target_language === 'en'}
-                  onChange={(e) => setFormData({ ...formData, target_language: e.target.value as 'en' | 'es' })}
+                  value="en-US"
+                  checked={formData.target_language === 'en-US'}
+                  onChange={(e) => setFormData({ ...formData, target_language: e.target.value as 'en-US' | 'es-ES' | 'es-MX' })}
                   className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
                 />
                 <span className="ml-2 text-sm font-medium text-gray-900">
-                  🇺🇸/🇬🇧 {t.common.english}
+                  🇺🇸 {t.common.englishUS}
                 </span>
               </label>
               <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
                 <input
                   type="radio"
                   name="target_language"
-                  value="es"
-                  checked={formData.target_language === 'es'}
-                  onChange={(e) => setFormData({ ...formData, target_language: e.target.value as 'en' | 'es' })}
+                  value="es-ES"
+                  checked={formData.target_language === 'es-ES'}
+                  onChange={(e) => setFormData({ ...formData, target_language: e.target.value as 'en-US' | 'es-ES' | 'es-MX' })}
                   className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
                 />
                 <span className="ml-2 text-sm font-medium text-gray-900">
-                  🇪🇸 {t.common.spanish}
+                  🇪🇸 {t.common.spanishES}
+                </span>
+              </label>
+              <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                <input
+                  type="radio"
+                  name="target_language"
+                  value="es-MX"
+                  checked={formData.target_language === 'es-MX'}
+                  onChange={(e) => setFormData({ ...formData, target_language: e.target.value as 'en-US' | 'es-ES' | 'es-MX' })}
+                  className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                />
+                <span className="ml-2 text-sm font-medium text-gray-900">
+                  🇲🇽 {t.common.spanishMX}
                 </span>
               </label>
                 </div>

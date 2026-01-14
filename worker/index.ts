@@ -14,7 +14,7 @@ import {
 } from './lib/ai-providers'
 import { classifyScenesByVisualType } from './lib/scene-classifier'
 import { ensureAvatarAndProductAssets } from './lib/assets'
-import { getAvatarVoiceForLanguage, normalizeTargetLanguage, type AvatarVoiceMeta, type TargetLanguage } from './lib/tts'
+import { getAvatarVoiceForLanguage, normalizeTargetLanguage, getLanguageLabel, type AvatarVoiceMeta, type TargetLanguage } from './lib/tts'
 import { replaceAudioWithNarration, extractAudioTrack, hasAudioStream, getAudioStreamInfo } from './lib/audio'
 import {
   concatVideos,
@@ -420,20 +420,22 @@ async function processJob(job: any) {
     const clipPaths: string[] = []
 
     const isVoiceoverMode = audioMode === 'voiceover'
-    const languageLabel = targetLanguage === 'en' ? 'English' : 'Spanish'
+    const languageInfo = getLanguageLabel(targetLanguage)
     
     // Simple i18n for worker error messages
     const getErrorMessage = (key: 'content_rejected'): string => {
       const messages = {
-        en: {
+        'en-US': {
           content_rejected: 'Content rejected by Floow AI safety filters. Please use more neutral descriptions.'
         },
-        es: {
+        'es-ES': {
+          content_rejected: 'Contenido rechazado por filtros de seguridad de Floow AI. Usa descripciones más neutrales.'
+        },
+        'es-MX': {
           content_rejected: 'Contenido rechazado por filtros de seguridad de Floow AI. Usa descripciones más neutrales.'
         }
       }
-      const lang = targetLanguage === 'en' ? 'en' : 'es'
-      return messages[lang][key]
+      return messages[targetLanguage][key]
     }
     
     const synthesizeNarration = async (text: string, sceneIndex: number): Promise<string> => {
@@ -772,8 +774,8 @@ async function processJob(job: any) {
       const veoPromptWithAudio = isVoiceoverMode
         ? veoPrompt
         : isAvatar
-          ? `${veoPrompt} Audio: avatar speaking to camera in ${languageLabel}, ${voiceGuide}, natural pacing, clear diction, delivering exactly: ${audioPromptText}.`
-          : `${veoPrompt} Audio: voiceover narration in ${languageLabel}, ${voiceGuide}, natural pacing, delivering exactly: ${audioPromptText}.`
+          ? `${veoPrompt} Audio: avatar speaking to camera in ${languageInfo.full}, ${voiceGuide}, natural pacing, clear diction, delivering the script in ${languageInfo.language} with ${languageInfo.accent}: ${audioPromptText}.`
+          : `${veoPrompt} Audio: voiceover narration in ${languageInfo.full}, ${voiceGuide}, natural pacing, delivering the script in ${languageInfo.language} with ${languageInfo.accent}: ${audioPromptText}.`
 
       const { buffer: veoBuffer, debug: veoAttempts } = await generateSceneVeoClipWithRetries({
         basePrompt: veoPromptWithAudio,

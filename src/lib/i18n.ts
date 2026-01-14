@@ -72,6 +72,9 @@ export interface Translations {
         scenes: string;
         english: string;
         spanish: string;
+        englishUS: string;
+        spanishES: string;
+        spanishMX: string;
     };
     
     // Features
@@ -373,6 +376,9 @@ const EN_TRANSLATIONS: Translations = {
         scenes: 'scenes',
         english: 'English',
         spanish: 'Spanish',
+        englishUS: 'English (USA)',
+        spanishES: 'Spanish (Spain)',
+        spanishMX: 'Spanish (Mexico)',
     },
     features: {
         title: 'Create winning creatives with these features',
@@ -656,6 +662,9 @@ const ES_ES_TRANSLATIONS: Translations = {
         scenes: 'escenas',
         english: 'Inglés',
         spanish: 'Español',
+        englishUS: 'Inglés (USA)',
+        spanishES: 'Español (España)',
+        spanishMX: 'Español (México)',
     },
     features: {
         title: 'Crea creativos ganadores con estas funciones',
@@ -939,6 +948,9 @@ const ES_MX_TRANSLATIONS: Translations = {
         scenes: 'escenas',
         english: 'Inglés',
         spanish: 'Español',
+        englishUS: 'Inglés (USA)',
+        spanishES: 'Español (España)',
+        spanishMX: 'Español (México)',
     },
     features: {
         title: 'Crea creativos ganadores con estas funciones',

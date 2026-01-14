@@ -33,7 +33,7 @@ export async function POST(req: Request) {
             video_mode,
             num_scenes = 3, // Default to 3 to match 30 free tokens
             reference_script = null, // Optional reference script from user
-            target_language = 'es',
+            target_language = 'es-MX', // Default to Mexican Spanish
             feedback = '' // Optional improvement feedback from user
         } = await req.json()
 
@@ -73,18 +73,38 @@ export async function POST(req: Request) {
             }, { status: 402 }) // Payment Required
         }
 
-        const targetLanguageNormalized = (target_language || 'es').toLowerCase() === 'en' ? 'en' : 'es'
-        const languageLabel = targetLanguageNormalized === 'en' ? 'ENGLISH' : 'SPANISH'
+        // Normalize target language to support new variants
+        const targetLangRaw = (target_language || 'es-MX').toLowerCase()
+        let targetLanguageNormalized: 'en-US' | 'es-ES' | 'es-MX' = 'es-MX'
+        let languageLabel = 'SPANISH'
+        let accentInfo = ''
+        
+        if (targetLangRaw === 'en-us' || targetLangRaw === 'en') {
+            targetLanguageNormalized = 'en-US'
+            languageLabel = 'ENGLISH'
+            accentInfo = 'American English (US accent)'
+        } else if (targetLangRaw === 'es-es') {
+            targetLanguageNormalized = 'es-ES'
+            languageLabel = 'SPANISH'
+            accentInfo = 'Spanish from Spain (Madrid accent - use "vosotros", "ordenador", etc.)'
+        } else {
+            targetLanguageNormalized = 'es-MX'
+            languageLabel = 'SPANISH'
+            accentInfo = 'Mexican Spanish (use "ustedes" instead of "vosotros", "computadora" instead of "ordenador", etc.)'
+        }
+        
         const voiceoverVisualRule = audio_mode === 'voiceover'
             ? `- Si audio_mode es "voiceover" (voz en off), NO describas al avatar moviendo la boca ni "hablando". En esas escenas, el avatar debe mirar a cámara o reaccionar/posar mientras escucha la narración en off (labios relajados, sin lip-sync).\n`
             : ''
 
-        // 4. Build System Prompt (language-aware)
+        // 4. Build System Prompt (language-aware with accent)
         const systemPrompt = `Eres un guionista experto en anuncios UGC para ecommerce. Generas guiones claros, directos y efectivos para anuncios verticales.
 
 REGLAS GENERALES:
 - Devuelves ÚNICAMENTE JSON válido sin texto adicional.
 - Todo el contenido debe estar en ${languageLabel}.
+- IDIOMA Y ACENTO REQUERIDO: ${accentInfo}
+  ${languageLabel === 'SPANISH' ? '→ Usa vocabulario y expresiones naturales del acento especificado (ej: si es México, usa "computadora" no "ordenador").' : '→ Use natural American English vocabulary and expressions.'}
 - Debes generar EXACTAMENTE el número de escenas indicado por el usuario.
 - Cada escena dura aproximadamente 3–4 segundos.
 - "spoken_text" es obligatorio en TODAS las escenas.
@@ -127,7 +147,8 @@ FORMATO JSON ESTRICTO:
 ANTES DE RESPONDER:
 - Verifica que scenes.length es EXACTAMENTE el número solicitado.
 - Verifica que TODAS las escenas tienen spoken_text no vacío.
-- Verifica que todo está en ${languageLabel === 'ENGLISH' ? 'inglés' : 'español'}.
+- Verifica que todo está en ${languageLabel === 'ENGLISH' ? 'inglés americano (US)' : 'español con el acento especificado (' + accentInfo + ')'}.
+- Verifica que el vocabulario y expresiones sean naturales para el acento seleccionado.
 - Verifica que el JSON es válido.`
 
         // 5. Build Video Type Instructions
@@ -184,7 +205,8 @@ DATOS TÉCNICOS:
 - Tipo de vídeo: ${video_type}
 - Modo de audio: ${audio_mode}
 - Idioma objetivo: ${languageLabel}
-- No hagas traducciones ni mezcles idiomas (todo en ${languageLabel}).
+- Acento específico: ${accentInfo}
+- No hagas traducciones ni mezcles idiomas (todo en ${languageLabel} con ${accentInfo}).
 
 INSTRUCCIONES SEGÚN TIPO DE VÍDEO:
 ${videoTypeInstruction}
