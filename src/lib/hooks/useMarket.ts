@@ -12,6 +12,22 @@ import { getTranslations } from '@/lib/i18n'
 import { useMemo } from 'react'
 
 /**
+ * Get market from browser cookie
+ */
+function getMarketFromCookie(): Market | null {
+    if (typeof document === 'undefined') return null
+    
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=')
+        if (name === 'market') {
+            return normalizeMarket(value)
+        }
+    }
+    return null
+}
+
+/**
  * Hook to get current market from URL params or path
  * 
  * Usage:
@@ -34,6 +50,10 @@ export function useMarket(): Market {
         const pathMarket = marketFromPath(pathname)
         if (pathMarket) return pathMarket
     }
+    
+    // Try cookie (important for /app/* routes that don't have market in path)
+    const cookieMarket = getMarketFromCookie()
+    if (cookieMarket) return cookieMarket
     
     // Default fallback
     return DEFAULT_MARKET

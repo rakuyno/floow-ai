@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
                 },
             ],
             mode: 'payment', // ONE-TIME payment, not subscription
-            success_url: `${appUrl}/${market}/app/billing?token_purchase=success`,
-            cancel_url: `${appUrl}/${market}/app/billing?token_purchase=canceled`,
+            success_url: `${appUrl}/app/billing?token_purchase=success`,
+            cancel_url: `${appUrl}/app/billing?token_purchase=canceled`,
             metadata: {
                 userId: user.id,
                 tokenAmount: String(tokenAmount),

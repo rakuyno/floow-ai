@@ -62,12 +62,23 @@ export async function POST(req: NextRequest) {
         // CASE 1: Target is FREE (Cancel)
         // ============================================================
         if (targetPlanId === 'free') {
-            if (!userSub?.stripe_subscription_id) {
-                return NextResponse.json({ ok: false, error: 'No active subscription to cancel' });
+            // If already on free plan
+            if (currentPlanId === 'free') {
+                return NextResponse.json({ ok: false, error: 'Already on free plan' });
             }
             
-            // Cancel immediately in Stripe
-            await stripe.subscriptions.cancel(userSub.stripe_subscription_id);
+            // Cancel in Stripe if there's an active subscription
+            if (userSub?.stripe_subscription_id) {
+                try {
+                    await stripe.subscriptions.cancel(userSub.stripe_subscription_id);
+                    console.log('[BILLING] ✅ Stripe subscription canceled:', userSub.stripe_subscription_id);
+                } catch (stripeError: any) {
+                    console.error('[BILLING] ⚠️ Failed to cancel Stripe subscription:', stripeError.message);
+                    // Continue anyway - we'll update DB to free
+                }
+            } else {
+                console.log('[BILLING] ⚠️ No Stripe subscription ID found, updating DB directly to free');
+            }
 
             // Update DB immediately (don't wait for webhook)
             await supabase
@@ -82,7 +93,7 @@ export async function POST(req: NextRequest) {
                 })
                 .eq('user_id', user.id);
 
-            console.log('[BILLING] Subscription canceled and DB updated to free');
+            console.log('[BILLING] ✅ DB updated to free plan');
 
             return NextResponse.json({ ok: true, action: 'canceled' });
         }
@@ -139,8 +150,8 @@ export async function POST(req: NextRequest) {
                 },
             ],
             mode: 'subscription',
-            success_url: `${appUrl}/${market}/app/billing?success=true`,
-            cancel_url: `${appUrl}/${market}/app/billing?canceled=true`,
+            success_url: `${appUrl}/app/billing?success=true`,
+            cancel_url: `${appUrl}/app/billing?canceled=true`,
             metadata: {
                 userId: user.id,
                 planId: targetPlanId,

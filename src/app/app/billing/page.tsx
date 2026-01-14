@@ -138,7 +138,7 @@ function BillingContent() {
         setProcessing(true);
 
         try {
-            console.log('[Billing] Changing plan to:', targetPlanId, 'market:', market);
+            console.log('[Billing] 🔄 Changing plan to:', targetPlanId, 'market:', market);
             const response = await fetch('/api/billing/change-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -149,24 +149,29 @@ function BillingContent() {
                 })
             });
 
+            console.log('[Billing] Response status:', response.status, response.statusText);
+
             const contentType = response.headers.get('content-type');
             let result: any = null;
 
             if (contentType && contentType.includes('application/json')) {
                 result = await response.json();
+                console.log('[Billing] Response data:', result);
             } else {
                 const text = await response.text();
-                console.error('[Billing] Non-JSON response:', text);
+                console.error('[Billing] ❌ Non-JSON response:', text);
                 throw new Error(t.billing.errorChangingPlan);
             }
 
             if (!response.ok) {
+                console.error('[Billing] ❌ Error response:', result);
                 throw new Error(result?.error || t.billing.errorChangingPlan);
             }
 
             // If cancel to free
             if (result.action === 'canceled') {
-                niceAlert('Suscripción cancelada');
+                console.log('[Billing] ✅ Plan canceled successfully');
+                niceAlert('Suscripción cancelada exitosamente');
                 await fetchData(); // ← Refresh data immediately
                 setShowPlanModal(false);
                 return;
@@ -174,12 +179,19 @@ function BillingContent() {
 
             // Always redirect to checkout for paid plans
             if (result.needsCheckout && result.checkoutUrl) {
+                console.log('[Billing] 🔄 Redirecting to checkout:', result.checkoutUrl);
                 window.location.href = result.checkoutUrl;
                 return;
             }
 
+            // If we get here, something unexpected happened
+            console.warn('[Billing] ⚠️ Unexpected response:', result);
+            niceAlert('Cambio de plan completado');
+            await fetchData();
+            setShowPlanModal(false);
+
         } catch (error: any) {
-            console.error('[Billing] Error changing plan:', error);
+            console.error('[Billing] ❌ Error changing plan:', error);
             niceAlert(error.message || t.billing.errorChangingPlan);
         } finally {
             setProcessing(false);
