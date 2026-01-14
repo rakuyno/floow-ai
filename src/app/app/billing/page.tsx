@@ -32,6 +32,28 @@ interface LedgerEntry {
     created_at: string;
 }
 
+// Plan pricing by market (monthly)
+const PLAN_PRICING: Record<Market, Record<string, number>> = {
+    us: {
+        free: 0,
+        starter: 45,
+        growth: 99,
+        agency: 249,
+    },
+    es: {
+        free: 0,
+        starter: 39,
+        growth: 99,
+        agency: 229,
+    },
+    mx: {
+        free: 0,
+        starter: 795,
+        growth: 1995,
+        agency: 4495,
+    },
+};
+
 // Token packages for slider by market
 const TOKEN_PACKAGES: Record<Market, Array<{ tokens: number; price: number; scenes: number }>> = {
     us: [
@@ -363,6 +385,9 @@ function BillingContent() {
                                 const videoSeconds = tokensToSeconds(plan.monthly_tokens);
                                 let ctaLabel = t.billing.changePlan;
                                 if (isCurrent) ctaLabel = t.billing.currentPlanLabel;
+                                
+                                // Get market-specific pricing
+                                const planPrice = PLAN_PRICING[market]?.[plan.id] ?? (plan.monthly_price_cents / 100);
 
                                 return (
                                     <div
@@ -373,7 +398,7 @@ function BillingContent() {
                                             <h3 className="text-lg font-semibold leading-8 text-gray-900">{plan.name}</h3>
                                             <p className="mt-2 flex items-baseline gap-x-1">
                                                 <span className="text-3xl font-bold tracking-tight text-gray-900">
-                                                    {formatCurrency(plan.monthly_price_cents / 100, market, { showDecimals: false })}
+                                                    {formatCurrency(planPrice, market, { showDecimals: false })}
                                                 </span>
                                                 <span className="text-sm font-semibold leading-6 text-gray-600">{t.billing.perMonth}</span>
                                             </p>

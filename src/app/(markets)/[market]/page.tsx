@@ -89,7 +89,6 @@ export default function MarketHome() {
                 <Steps market={market} t={t} />
                 <ProductHolding market={market} t={t} />
                 <Features market={market} t={t} />
-                <Pricing market={market} t={t} />
                 <FAQ market={market} faqs={faqs} />
                 <CTA market={market} t={t} />
                 <Footer market={market} t={t} />
@@ -119,7 +118,6 @@ const Navbar = ({ market, t }: { market: Market; t: ReturnType<typeof getTransla
                     {/* Desktop Menu */}
                     <div className="hidden md:flex items-center space-x-8">
                         <Link href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">{t.nav.features}</Link>
-                        <Link href="#pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">{t.nav.pricing}</Link>
                     </div>
 
                     <div className="hidden md:flex items-center space-x-4">
@@ -144,7 +142,6 @@ const Navbar = ({ market, t }: { market: Market; t: ReturnType<typeof getTransla
             {isOpen && (
                 <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-gray-100 shadow-lg py-4 px-4 flex flex-col space-y-4">
                     <Link href="#features" className="text-base font-medium text-gray-900 py-2" onClick={() => setIsOpen(false)}>{t.nav.features}</Link>
-                    <Link href="#pricing" className="text-base font-medium text-gray-900 py-2" onClick={() => setIsOpen(false)}>{t.nav.pricing}</Link>
                     <div className="h-px bg-gray-100 my-2"></div>
                     <Link href={`/${market}/login`} className="text-base font-medium text-gray-900 py-2" onClick={() => setIsOpen(false)}>{t.nav.login}</Link>
                     <Link href={`/${market}/signup`} className="bg-gray-900 text-white text-center py-3 rounded-lg font-medium" onClick={() => setIsOpen(false)}>
@@ -429,152 +426,6 @@ const Features = ({ market, t }: { market: Market; t: ReturnType<typeof getTrans
     )
 }
 
-const Pricing = ({ market, t }: { market: Market; t: ReturnType<typeof getTranslations> }) => {
-    const [annual, setAnnual] = useState(false) // Default to monthly
-
-    // Real pricing data by market (monthly and annual)
-    const pricingData: Record<Market, { 
-        starter: { monthly: number; annual: number };
-        growth: { monthly: number; annual: number };
-        agency: { monthly: number; annual: number };
-    }> = {
-        us: { 
-            starter: { monthly: 45, annual: 450 },
-            growth: { monthly: 99, annual: 990 },
-            agency: { monthly: 249, annual: 2490 }
-        },
-        es: { 
-            starter: { monthly: 39, annual: 390 },
-            growth: { monthly: 99, annual: 990 },
-            agency: { monthly: 229, annual: 2290 }
-        },
-        mx: { 
-            starter: { monthly: 795, annual: 7950 },
-            growth: { monthly: 1995, annual: 19950 },
-            agency: { monthly: 4495, annual: 44950 }
-        },
-    }
-
-    const prices = pricingData[market]
-
-    return (
-        <section id="pricing" className="py-20 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-                    <h2 className="text-3xl md:text-4xl font-bold text-gray-900">{t.pricing.title}</h2>
-
-                    <div className="flex items-center bg-gray-100 p-1 rounded-full">
-                        <button
-                            onClick={() => setAnnual(false)}
-                            className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${!annual ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-                        >
-                            {t.pricing.monthly}
-                        </button>
-                        <button
-                            onClick={() => setAnnual(true)}
-                            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${annual ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-                        >
-                            {t.pricing.annual}
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{t.pricing.annualSave}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Starter */}
-                    <div className="border border-gray-200 rounded-2xl p-8 hover:border-indigo-200 transition-colors">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Starter</h3>
-                        <div className="mb-6">
-                            <div className="flex items-baseline">
-                                <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.starter.annual / 12 : prices.starter.monthly, market, { showDecimals: annual })}
-                                </span>
-                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
-                            </div>
-                        </div>
-                        <ul className="space-y-4 mb-8">
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 550 {t.pricing.credits}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> ≈ 27 {t.pricing.videos}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
-                            </li>
-                        </ul>
-                        <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-white border-2 border-gray-900 text-gray-900 rounded-xl font-bold text-center hover:bg-gray-50 transition-colors">
-                            {t.pricing.tryFreeTrial}
-                        </Link>
-                    </div>
-
-                    {/* Growth */}
-                    <div className="border-2 border-indigo-600 rounded-2xl p-8 relative shadow-xl bg-white transform md:-translate-y-4">
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-sm font-medium">
-                            {t.pricing.mostPopular}
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Growth</h3>
-                        <div className="mb-6">
-                            <div className="flex items-baseline">
-                                <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.growth.annual / 12 : prices.growth.monthly, market, { showDecimals: annual })}
-                                </span>
-                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
-                            </div>
-                        </div>
-                        <ul className="space-y-4 mb-8">
-                            <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> 1200 {t.pricing.credits}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> ≈ 60 {t.pricing.videos}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-900 font-medium">
-                                <Check size={18} className="text-indigo-600" /> {t.pricing.prioritySupport}
-                            </li>
-                        </ul>
-                        <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold text-center hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-xl">
-                            {t.pricing.tryFreeTrial}
-                        </Link>
-                    </div>
-
-                    {/* Agency */}
-                    <div className="border border-gray-200 rounded-2xl p-8 hover:border-indigo-200 transition-colors">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Agency</h3>
-                        <div className="mb-6">
-                            <div className="flex items-baseline">
-                                <span className="text-4xl font-bold text-gray-900">
-                                    {formatCurrency(annual ? prices.agency.annual / 12 : prices.agency.monthly, market, { showDecimals: annual })}
-                                </span>
-                                <span className="text-gray-500 ml-2">{t.pricing.perMonth}</span>
-                            </div>
-                        </div>
-                        <ul className="space-y-4 mb-8">
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> 2500 {t.pricing.credits}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> ≈ 125 {t.pricing.videos}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> {t.pricing.noWatermark}
-                            </li>
-                            <li className="flex items-center gap-3 text-gray-600">
-                                <Check size={18} className="text-indigo-600" /> {t.pricing.prioritySupport}
-                            </li>
-                        </ul>
-                        <Link href={`/${market}/signup`} className="block w-full py-3 px-4 bg-white border-2 border-gray-900 text-gray-900 rounded-xl font-bold text-center hover:bg-gray-50 transition-colors">
-                            {t.pricing.tryFreeTrial}
-                        </Link>
-                    </div>
-                </div>
-            </div>
-        </section>
-    )
-}
 
 const FAQ = ({ market, faqs }: { market: Market; faqs: Array<{ question: string; answer: string }> }) => {
     const [openIndex, setOpenIndex] = useState<number | null>(null)
@@ -692,7 +543,6 @@ const Footer = ({ market, t }: { market: Market; t: ReturnType<typeof getTransla
                     <div className="flex gap-8">
                         <Link href={`/${market}/demo`} className="text-sm text-gray-600 hover:text-gray-900">Demo</Link>
                         <Link href="#features" className="text-sm text-gray-600 hover:text-gray-900">{t.nav.features}</Link>
-                        <Link href="#pricing" className="text-sm text-gray-600 hover:text-gray-900">{t.nav.pricing}</Link>
                     </div>
                 </div>
 
