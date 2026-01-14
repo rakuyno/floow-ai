@@ -7,6 +7,7 @@ import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
 import PricingModal from './PricingModal'
 import Logo from './Logo'
+import MarketSwitcher from './MarketSwitcher'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslations } from '@/lib/hooks/useMarket'
 
@@ -84,6 +85,9 @@ export default function AppHeader({ userEmail }: AppHeaderProps) {
                             </svg>
                             <span className="text-sm font-semibold text-gray-900">{tokenBalance}</span>
                         </div>
+
+                        {/* Market Switcher (Testing Tool) */}
+                        <MarketSwitcher />
 
                         {/* Upgrade Button */}
                         {currentPlanId !== 'agency' && (

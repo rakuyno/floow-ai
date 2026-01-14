@@ -218,6 +218,9 @@ export interface Translations {
         errorOpeningPortal: string;
         scenes: string;
         updatingPlan: string;
+        subscriptionCanceled: string;
+        planChanged: string;
+        errorProcessingPurchase: string;
     };
 
     // Questionnaire/New Ad
@@ -502,6 +505,9 @@ const EN_TRANSLATIONS: Translations = {
         errorOpeningPortal: 'Could not open billing portal.',
         scenes: 'scenes',
         updatingPlan: 'Updating your plan...',
+        subscriptionCanceled: 'Subscription successfully canceled',
+        planChanged: 'Plan change completed',
+        errorProcessingPurchase: 'Error processing purchase',
     },
     questionnaire: {
         title: 'Create New Ad',
@@ -782,6 +788,9 @@ const ES_ES_TRANSLATIONS: Translations = {
         errorOpeningPortal: 'No se pudo abrir el portal de facturación.',
         scenes: 'escenas',
         updatingPlan: 'Actualizando tu plan...',
+        subscriptionCanceled: 'Suscripción cancelada exitosamente',
+        planChanged: 'Cambio de plan completado',
+        errorProcessingPurchase: 'Error al procesar la compra',
     },
     questionnaire: {
         title: 'Crear Nuevo Anuncio',
@@ -1062,6 +1071,9 @@ const ES_MX_TRANSLATIONS: Translations = {
         errorOpeningPortal: 'No se pudo abrir el portal de facturación.',
         scenes: 'escenas',
         updatingPlan: 'Actualizando tu plan...',
+        subscriptionCanceled: 'Suscripción cancelada exitosamente',
+        planChanged: 'Cambio de plan completado',
+        errorProcessingPurchase: 'Error al procesar la compra',
     },
     questionnaire: {
         title: 'Crear Nuevo Anuncio',

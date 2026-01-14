@@ -171,7 +171,7 @@ function BillingContent() {
             // If cancel to free
             if (result.action === 'canceled') {
                 console.log('[Billing] ✅ Plan canceled successfully');
-                niceAlert('Suscripción cancelada exitosamente');
+                niceAlert(t.billing.subscriptionCanceled);
                 await fetchData(); // ← Refresh data immediately
                 setShowPlanModal(false);
                 return;
@@ -186,7 +186,7 @@ function BillingContent() {
 
             // If we get here, something unexpected happened
             console.warn('[Billing] ⚠️ Unexpected response:', result);
-            niceAlert('Cambio de plan completado');
+            niceAlert(t.billing.planChanged);
             await fetchData();
             setShowPlanModal(false);
 
@@ -233,7 +233,7 @@ function BillingContent() {
             window.location.href = checkoutUrl;
         } catch (error) {
             console.error(error);
-            niceAlert('Error al procesar la compra');
+            niceAlert(t.billing.errorProcessingPurchase);
             setBuyingTokens(false);
         }
     }
