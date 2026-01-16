@@ -8,7 +8,7 @@ import dotenv from 'dotenv'
 // Helpers
 import {
   generateKeyframe,
-  generateVeoVideoClip,
+  generateSeedanceVideoFromImage,
   generateTTS,
   VERTEX_CONFIG
 } from './lib/ai-providers'
@@ -26,7 +26,7 @@ import {
   refundTokens,
   TOKENS_PER_SCENE
 } from './lib/billing'
-import { type ElevenLabsVoiceProfile } from './lib/elevenlabs'
+import { type ElevenLabsVoiceProfile, speechToSpeechConvert } from './lib/elevenlabs'
 
 console.log('[ENV] SUPABASE_URL=', process.env.SUPABASE_URL);
 console.log('[ENV] SERVICE_ROLE prefix=', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 8));
@@ -228,10 +228,12 @@ const extractSupportCode = (msg: string): string | null => {
 
 console.log('')
 console.log('========================================')
-console.log('WORKER CONFIGURATION (v2 Senior Refactor)')
+console.log('WORKER CONFIGURATION (v3 Seedance)')
 console.log('========================================')
-console.log(`Keyframe Provider: vertex (${VERTEX_CONFIG.imageModel})`)
-console.log(`Video Model: veo-3.1 (${VERTEX_CONFIG.veoModel})`)
+console.log(`Keyframe Provider: Higgsfield Nano Banana Pro`)
+console.log(`Video Provider: Seedance 1.5 Pro (fal.ai)`)
+console.log(`Video Resolution: 720p (9:16)`)
+console.log(`Audio Enhancement: STS ${process.env.ENABLE_STS_ENHANCER === 'true' ? 'ENABLED' : 'DISABLED'}`)
 console.log(`Max concurrent jobs: ${MAX_CONCURRENT_JOBS}`)
 console.log('========================================')
 console.log('')
@@ -696,15 +698,17 @@ async function processJob(job: any) {
             attempt += 1
             if (attempt > MAX_ATTEMPTS) break
 
-            console.log(`[Scene ${i + 1}] Veo attempt ${attempt}/${MAX_ATTEMPTS} strategy=${strategy.id} usedRef=${useReference} regenKF=${regenThisAttempt}`)
+            console.log(`[Scene ${i + 1}] Seedance attempt ${attempt}/${MAX_ATTEMPTS} strategy=${strategy.id} usedRef=${useReference} regenKF=${regenThisAttempt}`)
             try {
-              const buffer = await generateVeoVideoClip({
+              // REPLACED: generateVeoVideoClip → generateSeedanceVideoFromImage
+              const buffer = await generateSeedanceVideoFromImage({
                 prompt: strategy.prompt,
                 durationSeconds,
-                withAudio,
-                referenceImageBuffer: useReference ? refBuffer || undefined : undefined,
-                referenceImageMimeType: useReference ? refMime || undefined : undefined,
-                seed
+                imageBase64: (useReference && refBuffer) ? refBuffer.toString('base64') : undefined,
+                mimeType: (useReference && refMime) ? refMime : undefined,
+                aspectRatio: '9:16',
+                resolution: '720p',
+                generateAudio: withAudio
               })
 
               attempts.push({
@@ -715,8 +719,8 @@ async function processJob(job: any) {
                 supportCode: null
               })
 
-              console.log(`[Scene ${i + 1}] Veo success with strategy ${strategy.id} on attempt ${attempt}/${MAX_ATTEMPTS}`)
-              return { buffer, debug: attempts }
+              console.log(`[Scene ${i + 1}] Seedance success with strategy ${strategy.id} on attempt ${attempt}/${MAX_ATTEMPTS}`)
+              return { buffer: buffer.buffer, debug: attempts }
             } catch (err: any) {
               const msg = err?.message || ''
               const msgLower = msg.toLowerCase()
@@ -736,7 +740,7 @@ async function processJob(job: any) {
                 errShort: msg.slice(0, 200)
               })
 
-              console.warn(`[Scene ${i + 1}] Veo attempt ${attempt}/${MAX_ATTEMPTS} strategy=${strategy.id} failed: ${msg} supportCode=${supportCode || 'n/a'}`)
+              console.warn(`[Scene ${i + 1}] Seedance attempt ${attempt}/${MAX_ATTEMPTS} strategy=${strategy.id} failed: ${msg} supportCode=${supportCode || 'n/a'}`)
 
               if (imageViolation) {
                 sawImageViolation = true
@@ -766,19 +770,21 @@ async function processJob(job: any) {
           } while (retrySameStrategy && attempt < MAX_ATTEMPTS)
         }
 
-        throw new Error(`Veo failed after ${attempts.length} attempts for scene ${i + 1}`)
+        throw new Error(`Seedance failed after ${attempts.length} attempts for scene ${i + 1}`)
       }
 
       const audioPromptText = sanitizeForModel(narrationText, safeTemplate)
       const voiceGuide = buildVoiceGuide(avatarVoiceMeta)
-      const veoPromptWithAudio = isVoiceoverMode
+      // Note: veoPrompt naming kept for compatibility, but now using Seedance
+      const videoPromptWithAudio = isVoiceoverMode
         ? veoPrompt
         : isAvatar
           ? `${veoPrompt} Audio: avatar speaking to camera in ${languageInfo.full}, ${voiceGuide}, natural pacing, clear diction, delivering the script in ${languageInfo.language} with ${languageInfo.accent}: ${audioPromptText}.`
           : `${veoPrompt} Audio: voiceover narration in ${languageInfo.full}, ${voiceGuide}, natural pacing, delivering the script in ${languageInfo.language} with ${languageInfo.accent}: ${audioPromptText}.`
 
-      const { buffer: veoBuffer, debug: veoAttempts } = await generateSceneVeoClipWithRetries({
-        basePrompt: veoPromptWithAudio,
+      // REPLACED: Veo → Seedance (generateSceneVeoClipWithRetries now calls Seedance internally)
+      const { buffer: videoBuffer, debug: videoAttempts } = await generateSceneVeoClipWithRetries({
+        basePrompt: videoPromptWithAudio,
         safeVisualPrompt: safeVisual,
         durationSeconds: clipDurationSeconds,
         seed: jobSeed + i,
@@ -787,8 +793,8 @@ async function processJob(job: any) {
         isAvatarScene: isAvatar,
         withAudio: withAudioForVeo
       })
-      const veoPath = path.join(tempDir, `${job.id}_s${i}_${audioMode}.mp4`)
-      fs.writeFileSync(veoPath, veoBuffer)
+      const videoPath = path.join(tempDir, `${job.id}_s${i}_${audioMode}.mp4`)
+      fs.writeFileSync(videoPath, videoBuffer)
 
       if (isVoiceoverMode) {
         if (!narrationPath) {
@@ -797,24 +803,24 @@ async function processJob(job: any) {
         // Voiceover: Replace video audio with narration TTS
         const mergedPath = path.join(tempDir, `${job.id}_s${i}_merged.mp4`)
         await replaceAudioWithNarration({
-          videoPath: veoPath,
+          videoPath: videoPath,
           narrationPath,
           outputPath: mergedPath
         })
         finalScenePath = mergedPath
       } else {
-        // RAW mode: mantener SOLO el audio generado por Veo (sin ElevenLabs encima)
-        finalScenePath = veoPath
+        // RAW mode: keep Seedance-generated audio (no TTS overlay)
+        finalScenePath = videoPath
       }
 
       // Persist attempts into scene metadata if available
       try {
-        m.veo_attempts = veoAttempts
+        m.veo_attempts = videoAttempts // Note: field name kept for DB compatibility
         const sceneMetadataEnvelope = updatedJob?.scene_metadata || { scenes: sceneMetadata }
         sceneMetadataEnvelope.scenes = sceneMetadata
         await supabase.from('render_jobs').update({ scene_metadata: sceneMetadataEnvelope }).eq('id', job.id)
       } catch (metaErr: any) {
-        console.warn(`[Scene ${i + 1}] Failed to persist veo_attempts: ${metaErr?.message || metaErr}`)
+        console.warn(`[Scene ${i + 1}] Failed to persist video_attempts: ${metaErr?.message || metaErr}`)
       }
 
       await assertAudioTrack(finalScenePath, i)
@@ -831,12 +837,106 @@ async function processJob(job: any) {
     const concatPath = path.join(tempDir, `${job.id}_concat.mp4`)
     await concatVideos(clipPaths, concatPath)
 
+    // 8.5. STS Audio Enhancement (RAW mode only)
+    let processedVideoPath = concatPath
+    const enableSTS = process.env.ENABLE_STS_ENHANCER === 'true'
+    const stsVoiceId = process.env.ELEVENLABS_STS_VOICE_ID
+
+    if (audioMode === 'raw' && enableSTS && stsVoiceId) {
+      console.log(`[Job ${job.id}] Applying STS audio enhancement...`)
+      try {
+        // Check if video has audio stream
+        const hasAudio = await hasAudioStream(concatPath)
+        if (!hasAudio) {
+          console.warn(`[STS] Video has no audio stream, skipping enhancement`)
+        } else {
+          // Extract audio from concatenated video
+          console.log(`[STS] Extracting audio from final video...`)
+          const extractedAudioPath = path.join(tempDir, `${job.id}_extracted.wav`)
+          await extractAudioTrack({
+            inputVideoPath: concatPath,
+            outputAudioPath: extractedAudioPath
+          })
+
+          // Get original audio duration
+          const originalAudioInfo = await getAudioStreamInfo(concatPath)
+          const originalDuration = originalAudioInfo.duration || 0
+          console.log(`[STS] Original audio duration: ${originalDuration.toFixed(2)}s`)
+
+          // Convert audio with ElevenLabs STS
+          const convertedAudioBuffer = await speechToSpeechConvert({
+            inputAudioPath: extractedAudioPath,
+            voiceId: stsVoiceId,
+            modelId: process.env.ELEVENLABS_STS_MODEL_ID
+          })
+
+          // Save converted audio
+          const convertedAudioPath = path.join(tempDir, `${job.id}_sts_converted.mp3`)
+          fs.writeFileSync(convertedAudioPath, convertedAudioBuffer)
+
+          // Get converted audio duration
+          const convertedAudioInfo = await getAudioStreamInfo(convertedAudioPath)
+          const convertedDuration = convertedAudioInfo.duration || 0
+          console.log(`[STS] Converted audio duration: ${convertedDuration.toFixed(2)}s`)
+
+          // Check duration difference and adjust if needed (±5% tolerance)
+          let finalAudioPath = convertedAudioPath
+          if (originalDuration > 0 && convertedDuration > 0) {
+            const durationDiff = Math.abs(convertedDuration - originalDuration)
+            const diffPercent = (durationDiff / originalDuration) * 100
+
+            if (diffPercent > 5) {
+              console.log(`[STS] Duration difference ${diffPercent.toFixed(1)}% exceeds 5%, adjusting tempo...`)
+              const tempoFactor = originalDuration / convertedDuration
+              const clampedTempo = Math.max(0.95, Math.min(1.05, tempoFactor))
+
+              if (Math.abs(clampedTempo - 1.0) > 0.01) {
+                const adjustedAudioPath = path.join(tempDir, `${job.id}_sts_adjusted.mp3`)
+                await new Promise<void>((resolve, reject) => {
+                  ffmpeg(convertedAudioPath)
+                    .audioFilters(`atempo=${clampedTempo.toFixed(3)}`)
+                    .save(adjustedAudioPath)
+                    .on('end', () => {
+                      console.log(`[STS] Tempo adjusted by factor ${clampedTempo.toFixed(3)}`)
+                      resolve()
+                    })
+                    .on('error', reject)
+                })
+                finalAudioPath = adjustedAudioPath
+              }
+            } else {
+              console.log(`[STS] Duration difference ${diffPercent.toFixed(1)}% is within tolerance`)
+            }
+          }
+
+          // Replace audio in video
+          const enhancedVideoPath = path.join(tempDir, `${job.id}_sts_enhanced.mp4`)
+          await replaceAudioWithNarration({
+            videoPath: concatPath,
+            narrationPath: finalAudioPath,
+            outputPath: enhancedVideoPath
+          })
+
+          processedVideoPath = enhancedVideoPath
+          console.log(`[STS] Audio enhancement complete`)
+        }
+      } catch (stsError: any) {
+        console.warn(`[STS] Enhancement failed, using original audio:`, stsError.message || stsError)
+        console.warn(`[STS] Fallback to original audio`)
+        // Continue with original concatPath
+      }
+    } else {
+      if (audioMode === 'raw') {
+        console.log(`[Job ${job.id}] STS enhancer disabled (ENABLE_STS_ENHANCER=${enableSTS}, voice_id=${!!stsVoiceId})`)
+      }
+    }
+
     // 9. Watermark (Logic: Agency -> No, Free -> Yes)
-    let finalPath = concatPath
+    let finalPath = processedVideoPath
     if (needsWatermark) {
       console.log(`[Job ${job.id}] Applying Watermark (Free Plan)`)
       const watermarkedPath = path.join(tempDir, `${job.id}_wm.mp4`)
-      await addWatermark(concatPath, watermarkedPath)
+      await addWatermark(processedVideoPath, watermarkedPath)
       finalPath = watermarkedPath
     } else {
       console.log(`[Job ${job.id}] Skipping Watermark (Paid Plan)`)

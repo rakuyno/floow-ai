@@ -4,6 +4,7 @@ import { Storage } from '@google-cloud/storage'
 import dotenv from 'dotenv'
 import path from 'path'
 import crypto from 'crypto'
+import { fal } from '@fal-ai/client'
 import { synthesizeWithElevenLabs } from './elevenlabs'
 import type { ElevenLabsVoiceProfile } from './elevenlabs'
 
@@ -47,7 +48,22 @@ const RETRY_CONFIG = {
     DELAYS: [5000, 10000, 20000, 30000, 45000, 60000, 60000, 60000]
 } as const
 
-console.log('ai-providers.ts VERSION 14 - Nano Banana Pro Keyframes Strategy')
+// Seedance (fal.ai) configuration for video generation
+const SEEDANCE_CONFIG = {
+    falKey: process.env.FAL_KEY || '',
+    resolution: process.env.SEEDANCE_RESOLUTION || '720p',
+    endpoint: 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
+    endpointText: 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video'
+} as const
+
+// Configure fal client
+if (SEEDANCE_CONFIG.falKey) {
+    fal.config({ credentials: SEEDANCE_CONFIG.falKey })
+} else {
+    console.warn('[SEEDANCE] FAL_KEY not configured')
+}
+
+console.log('ai-providers.ts VERSION 15 - Seedance 1.5 Pro + Nano Banana Pro Keyframes')
 console.log('Vertex/Flux Configuration:')
 console.log('- Project ID:', VERTEX_CONFIG.projectId)
 console.log('- Location:', VERTEX_CONFIG.location)
@@ -315,7 +331,189 @@ export async function generateTTS(
 }
 
 // ============================================================================
-// VIDEO GENERATION (VERTEX KEO)
+// VIDEO GENERATION (SEEDANCE 1.5 PRO via fal.ai)
+// ============================================================================
+
+/**
+ * Generate video from image using Seedance 1.5 Pro via fal.ai
+ * Replaces Veo 3.1 as primary video generation provider
+ */
+export async function generateSeedanceVideoFromImage(options: {
+    prompt: string
+    imageBase64?: string
+    mimeType?: string
+    durationSeconds?: number
+    aspectRatio?: '9:16'
+    resolution?: '720p'
+    generateAudio?: boolean
+}): Promise<{ buffer: Buffer; mimeType: 'video/mp4' }> {
+    const {
+        prompt,
+        imageBase64,
+        mimeType,
+        durationSeconds = 4,
+        aspectRatio = '9:16',
+        resolution = '720p',
+        generateAudio = true
+    } = options
+
+    console.log(`[SEEDANCE] Starting video generation`)
+    console.log(`[SEEDANCE] Duration: ${durationSeconds}s, Ratio: ${aspectRatio}, Resolution: ${resolution}`)
+    console.log(`[SEEDANCE] Audio: ${generateAudio ? 'ENABLED' : 'DISABLED (Silent)'}`)
+    console.log(`[SEEDANCE] Has reference image: ${!!imageBase64}`)
+
+    if (!SEEDANCE_CONFIG.falKey) {
+        throw new Error('FAL_KEY not configured for Seedance')
+    }
+
+    // Retry logic for transient errors
+    const MAX_RETRIES = 3
+    const RETRY_DELAYS = [2000, 5000, 10000]
+
+    const executeGeneration = async (endpoint: string, useImage: boolean): Promise<Buffer> => {
+        const input: any = {
+            prompt,
+            duration: String(durationSeconds),
+            aspect_ratio: aspectRatio,
+            resolution: resolution,
+            generate_audio: generateAudio,
+            enable_safety_checker: true
+        }
+
+        if (useImage && imageBase64) {
+            input.image_url = `data:${mimeType || 'image/png'};base64,${imageBase64}`
+        }
+
+        console.log(`[SEEDANCE] Using endpoint: ${endpoint}`)
+        console.log(`[SEEDANCE] Input summary:`, JSON.stringify({
+            prompt: prompt.slice(0, 100) + '...',
+            duration: input.duration,
+            aspect_ratio: input.aspect_ratio,
+            resolution: input.resolution,
+            generate_audio: input.generate_audio,
+            has_image: useImage && !!imageBase64
+        }))
+
+        let lastError: any = null
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                console.log(`[SEEDANCE] Attempt ${attempt + 1}/${MAX_RETRIES + 1}`)
+
+                // Subscribe to fal endpoint
+                const result = await fal.subscribe(endpoint as any, {
+                    input,
+                    logs: true,
+                    onQueueUpdate: (update: any) => {
+                        if (update.status) {
+                            console.log(`[SEEDANCE] Queue status: ${update.status}`)
+                        }
+                        if (update.logs) {
+                            update.logs.forEach((log: any) => {
+                                console.log(`[SEEDANCE] Log: ${log.message || JSON.stringify(log)}`)
+                            })
+                        }
+                    }
+                })
+
+                // Extract video URL from result (fal.ai returns data in .data property)
+                const resultData: any = result.data || result
+                const videoUrl = resultData?.video?.url || resultData?.url
+                if (!videoUrl) {
+                    throw new Error('No video URL in response: ' + JSON.stringify(result.data || result))
+                }
+
+                console.log(`[SEEDANCE] Video ready, downloading from: ${videoUrl}`)
+
+                // Download video
+                const downloadResponse = await axios.get(videoUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 120000 // 2 minutes
+                })
+
+                const buffer = Buffer.from(downloadResponse.data)
+                console.log(`[SEEDANCE] Downloaded ${buffer.length} bytes`)
+
+                return buffer
+
+            } catch (error: any) {
+                lastError = error
+                const status = error?.response?.status || error?.status
+                const message = error?.message || String(error)
+
+                console.error(`[SEEDANCE] Attempt ${attempt + 1} failed:`, message)
+
+                // Determine if we should retry
+                const isTransient = 
+                    status === 429 || 
+                    status === 503 || 
+                    status === 504 ||
+                    status === 500 ||
+                    message.includes('timeout') ||
+                    message.includes('ECONNRESET') ||
+                    message.includes('ETIMEDOUT')
+
+                const is4xxClientError = status && status >= 400 && status < 500 && status !== 429
+
+                if (is4xxClientError) {
+                    console.error(`[SEEDANCE] Client error (${status}), not retrying`)
+                    throw error
+                }
+
+                if (!isTransient || attempt >= MAX_RETRIES) {
+                    throw error
+                }
+
+                const delay = RETRY_DELAYS[attempt]
+                console.log(`[SEEDANCE] Retrying in ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+            }
+        }
+
+        throw lastError
+    }
+
+    try {
+        // Primary strategy: image-to-video with reference
+        if (imageBase64) {
+            try {
+                return {
+                    buffer: await executeGeneration(SEEDANCE_CONFIG.endpoint, true),
+                    mimeType: 'video/mp4'
+                }
+            } catch (error: any) {
+                const status = error?.response?.status || error?.status
+                const is4xxClientError = status && status >= 400 && status < 500
+
+                if (is4xxClientError) {
+                    console.warn(`[SEEDANCE] Image-to-video rejected (${status}), falling back to text-to-video`)
+                    // Fall through to text-to-video fallback
+                } else {
+                    throw error
+                }
+            }
+        }
+
+        // Fallback: text-to-video without reference
+        console.log(`[SEEDANCE] Using text-to-video endpoint (no image reference)`)
+        return {
+            buffer: await executeGeneration(SEEDANCE_CONFIG.endpointText, false),
+            mimeType: 'video/mp4'
+        }
+
+    } catch (error: any) {
+        const errorMsg = error?.message || String(error)
+        const errorBody = error?.response?.data ? JSON.stringify(error.response.data).slice(0, 500) : ''
+        console.error(`[SEEDANCE] Generation failed:`, errorMsg)
+        if (errorBody) {
+            console.error(`[SEEDANCE] Error body:`, errorBody)
+        }
+        throw new Error(`Seedance video generation failed: ${errorMsg}`)
+    }
+}
+
+// ============================================================================
+// VIDEO GENERATION (VERTEX VEO) - LEGACY, NOT USED
 // ============================================================================
 
 // Helper to parse integer envs safely with fallback

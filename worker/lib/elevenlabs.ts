@@ -1,4 +1,5 @@
 import axios from 'axios'
+import * as fs from 'fs'
 import type { TargetLanguage, ElevenLabsVoiceProfile } from './tts'
 
 // Re-export type so consumers can import from this module directly
@@ -103,5 +104,85 @@ export async function transformSpeechWithElevenLabs(
 
   const respArrayBuffer = await res.arrayBuffer()
   return Buffer.from(respArrayBuffer)
+}
+
+/**
+ * Convert speech from audio file using ElevenLabs Speech-to-Speech (Voice Changer)
+ * Used for enhancing raw video audio with consistent voice quality
+ */
+export async function speechToSpeechConvert(options: {
+  inputAudioPath: string
+  voiceId: string
+  modelId?: string
+}): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) throw new Error('ELEVENLABS_API_KEY is not configured')
+
+  const { inputAudioPath, voiceId, modelId = process.env.ELEVENLABS_STS_MODEL_ID || ELEVEN_STS_MODEL } = options
+
+  console.log(`[STS] Converting speech with ElevenLabs`)
+  console.log(`[STS] Model: ${modelId}`)
+  console.log(`[STS] Voice ID: ${voiceId}`)
+  console.log(`[STS] Input: ${inputAudioPath}`)
+
+  // Read audio file
+  if (!fs.existsSync(inputAudioPath)) {
+    throw new Error(`STS input file not found: ${inputAudioPath}`)
+  }
+
+  const audioBuffer = fs.readFileSync(inputAudioPath)
+  console.log(`[STS] Read ${audioBuffer.length} bytes from input file`)
+
+  // Prepare form data for STS
+  const form = new FormData()
+  form.append('model_id', modelId)
+  
+  // STS settings optimized for voice enhancement
+  const stsSettings = {
+    stability: 0.75,
+    similarity_boost: 0.85,
+    style: 0.0,
+    use_speaker_boost: true
+  }
+  form.append('voice_settings', JSON.stringify(stsSettings))
+
+  // Convert Buffer to ArrayBuffer for FormData
+  const outgoingBuffer = audioBuffer.byteLength === audioBuffer.buffer.byteLength
+    ? audioBuffer.buffer
+    : audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength)
+  const audioArrayBuffer = outgoingBuffer instanceof ArrayBuffer
+    ? outgoingBuffer
+    : Uint8Array.from(audioBuffer).buffer
+
+  // Determine MIME type from file extension
+  const mimeType = inputAudioPath.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
+  form.append('audio', new Blob([audioArrayBuffer], { type: mimeType }), 'input_audio')
+
+  try {
+    const res = await fetch(`${ELEVEN_BASE_URL}/speech-to-speech/${voiceId}/stream`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        Accept: 'audio/mpeg'
+      },
+      body: form
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      console.error(`[STS] Failed: ${res.status} ${res.statusText}`, errorText)
+      throw new Error(`ElevenLabs STS failed: ${res.status} ${res.statusText} ${errorText}`)
+    }
+
+    const respArrayBuffer = await res.arrayBuffer()
+    const resultBuffer = Buffer.from(respArrayBuffer)
+    console.log(`[STS] Converted ${resultBuffer.length} bytes`)
+
+    return resultBuffer
+
+  } catch (error: any) {
+    console.error(`[STS] Conversion error:`, error.message || error)
+    throw error
+  }
 }
 

@@ -10,6 +10,7 @@
         "worker": "ts-node --project worker/tsconfig.json worker/index.ts"
     },
     "dependencies": {
+        "@fal-ai/client": "^1.8.3",
         "@google-cloud/storage": "^7.7.0",
         "@headlessui/react": "^2.2.9",
         "@supabase/ssr": "^0.1.0",
